@@ -1,0 +1,36 @@
+I want an amiga os 4 handler that can connect to ftp and sftp servers.
+
+It shall have two parts:
+ sftphprefs
+  A prefs program that helps the user maintain an xml based  config file in
+  env/envarc. It list all ftp/sftp sites that the user currently has configured
+   Each site has details for:
+    A name (The name nust be a valid name for a file in an amiga os filesystem)
+    Server adress
+    Server port
+    Server protocol (ftp/sftp)
+    Username
+    Password
+  The user can add/removee and edit existing sites in the list.
+
+ sftp-handler
+  A handler that exposes the configured (s)ftp sites. At root level it will
+  list each configured ftp site by its name with no actual (s)ftp connection.
+
+  At root level eveything that the handler returns is read only. Adding/removing
+  entries at root level is done by sftphpreds
+
+  if a request of the contents of any of those directories is made the handle
+  connects to the corresponsding (s)ftp site and returns the file list from
+  the server.
+
+  It must be able to handle most common file operations.
+
+Examine if this is possible to do. Use the cross compiler docker and the
+Amiga OS4 client. clib4 is available and there's a modern amissl available if
+that is of any use.
+
+https://os4depot.net/?function=showfile&file=library/misc/amissl.lha
+https://os4depot.net/?function=showfile&file=development/library/misc/clib4.lha
+
+If it is possible then create a new private repository on github and create the prefsprogram and handler.

@@ -1,0 +1,10 @@
+/build/
+/dist/*.lha
+/dist/stage/
+/testserver/keys/
+/testserver/ftp-data/
+/testserver/sftp-data/
+*.o
+*.d
+*.debug
+__pycache__/
