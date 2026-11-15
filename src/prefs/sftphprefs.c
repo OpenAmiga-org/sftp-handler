@@ -549,12 +549,17 @@ static int count_entry(void *ud, const char *name, const rstat *st)
 	return 0;
 }
 
+static int64_t question_ms;   /* time spent on questions during a test */
+
 static int prefs_hostkey(void *ud, const char *host, int port, const char *keytype,
                   const char *fingerprint, int mismatch)
 {
 	const site_cfg *s = ud;
+	int64_t t = plat_ms();
+	int answer = plat_ask_hostkey(s->name, host, port, keytype, fingerprint, mismatch);
 
-	return plat_ask_hostkey(s->name, host, port, keytype, fingerprint, mismatch);
+	question_ms += plat_ms() - t;
+	return answer;
 }
 
 static void test_connection(void)
@@ -606,6 +611,7 @@ static void test_connection(void)
 	env.hostkey = prefs_hostkey;
 	env.ud = &s;
 	busy(1);
+	question_ms = 0;
 	t0 = plat_ms();
 	if (s.protocol == PROTO_SFTP)
 		rc = sftp_connect(&s, pass, &env, &r, err, sizeof(err), &fail);
@@ -619,6 +625,7 @@ static void test_connection(void)
 			         r->error[0] != '\0' ? r->error : strerror(-rc));
 	}
 	busy(0);
+	t0 += question_ms;
 	if (rc == 0) {
 		snprintf(msg, sizeof(msg),
 		         "The connection works.\n\n"
@@ -637,8 +644,6 @@ static void test_connection(void)
 		}
 	} else {
 		snprintf(msg, sizeof(msg), "The connection failed.\n\n%s", err);
-		if (fail == RFAIL_LOGIN && asked)
-			strncat(msg, "\n\nThe password typed was not accepted.", sizeof(msg) - strlen(msg) - 1);
 	}
 	if (r != NULL)
 		r->ops->close(r);

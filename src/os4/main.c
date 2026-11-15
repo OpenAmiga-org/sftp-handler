@@ -17,6 +17,7 @@
  */
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <proto/intuition.h>
 #include <dos/dosextens.h>
 #include <devices/timer.h>
 #include <workbench/startup.h>
@@ -66,6 +67,58 @@ struct sfh_start {
 /* clib4's _start; renamed to clib4_crt_start after linking (tools/os4.mk) */
 extern int _start(STRPTR args, int32 arglen, struct Library *sysbase);
 
+/* the clib4.library the program was built against */
+#define CLIB4_VERSION  2
+#define CLIB4_REVISION 5
+
+/* clib4's startup code ends the program when clib4.library is too old,
+ * and DOS would then wait for the handler's answer for ever (every access
+ * to the device hangs). So the version is checked here first; without the
+ * C library: Exec, DOS and Intuition only. */
+static int clib4_ok(struct ExecIFace *iexec, struct DosPacket *pkt)
+{
+	struct Library *lib = iexec->OpenLibrary("clib4.library", 0);
+	struct Library *ibase, *dbase;
+	struct IntuitionIFace *iint;
+	struct DOSIFace *idos;
+	int ok = lib != NULL && (lib->lib_Version > CLIB4_VERSION ||
+	         (lib->lib_Version == CLIB4_VERSION && lib->lib_Revision >= CLIB4_REVISION));
+
+	if (lib != NULL)
+		iexec->CloseLibrary(lib);
+	if (ok)
+		return 1;
+	ibase = iexec->OpenLibrary("intuition.library", 50);
+	if (ibase != NULL) {
+		iint = (struct IntuitionIFace *)iexec->GetInterface(ibase, "main", 1, NULL);
+		if (iint != NULL) {
+			struct EasyStruct es;
+
+			es.es_StructSize = sizeof(es);
+			es.es_Flags = 0;
+			es.es_Title = (STRPTR)SFH_VERS;
+			es.es_TextFormat = (STRPTR)"sftp-handler needs clib4.library 2.5 or newer.\n"
+			                           "OS4Depot: development/library/misc/clib4.lha";
+			es.es_GadgetFormat = (STRPTR)"OK";
+			es.es_Screen = NULL;
+			es.es_TagList = NULL;
+			iint->EasyRequestArgs(NULL, &es, NULL, NULL);
+			iexec->DropInterface((struct Interface *)iint);
+		}
+		iexec->CloseLibrary(ibase);
+	}
+	dbase = iexec->OpenLibrary("dos.library", 50);
+	if (dbase != NULL) {
+		idos = (struct DOSIFace *)iexec->GetInterface(dbase, "main", 1, NULL);
+		if (idos != NULL) {
+			idos->ReplyPkt(pkt, DOSFALSE, ERROR_INVALID_RESIDENT_LIBRARY);
+			iexec->DropInterface((struct Interface *)idos);
+		}
+		iexec->CloseLibrary(dbase);
+	}
+	return 0;
+}
+
 int32 sfh_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 {
 	struct ExecIFace *iexec = (struct ExecIFace *)((struct ExecBase *)sysbase)->MainInterface;
@@ -80,6 +133,8 @@ int32 sfh_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 		msg = iexec->GetMsg(&me->pr_MsgPort);
 		pkt = (struct DosPacket *)msg->mn_Node.ln_Name;
 		if (pkt != NULL && pkt->dp_Link == msg) {
+			if (!clib4_ok(iexec, pkt))
+				return RETURN_FAIL;
 			/* every field set by hand: no memset() before the C library
 			 * is ready */
 			st.pkt = pkt;

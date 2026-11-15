@@ -51,6 +51,7 @@ typedef struct site {
 	int64_t      last_fail;
 	int          last_err;
 	int          refused;    /* cancelled or refused: no new tries until reset */
+	time_t       refused_kh; /* host key refused: date of known_hosts then */
 	int          reported;   /* a connection problem was shown */
 	char         password[256];   /* typed into the requester */
 	int          have_password;
@@ -527,6 +528,19 @@ static int need_remote(sfs *fs, site *s)
 	s->last_use = plat_ms();
 	if (s->r != NULL)
 		return 0;
+	if (s->refused && s->refused_kh != 0) {
+		/* a changed known_hosts (sftphprefs: Forget host key) allows a
+		 * new try */
+		struct stat st;
+		time_t now_kh = fs->opt.known_hosts != NULL && stat(fs->opt.known_hosts, &st) == 0 ?
+		                st.st_mtime : 1;
+
+		if (now_kh != s->refused_kh) {
+			s->refused = 0;
+			s->reported = 0;
+			s->last_fail = 0;
+		}
+	}
 	if (s->refused)
 		return ERR_OFFLINE;
 	if (s->last_fail != 0 && plat_ms() - s->last_fail < RETRY_MS)
@@ -594,8 +608,14 @@ static int need_remote(sfs *fs, site *s)
 		}
 		break;
 	}
-	if (fail == RFAIL_HOSTKEY)
+	s->refused_kh = 0;
+	if (fail == RFAIL_HOSTKEY) {
+		struct stat st;
+
 		s->refused = 1;
+		s->refused_kh = fs->opt.known_hosts != NULL && stat(fs->opt.known_hosts, &st) == 0 ?
+		                st.st_mtime : 1;
+	}
 	if (!s->reported) {
 		s->reported = 1;
 		snprintf(msg, sizeof(msg), "Cannot connect to %s (%s, port %d):\n%s\n\n%s",
