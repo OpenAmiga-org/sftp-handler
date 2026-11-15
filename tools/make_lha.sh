@@ -36,6 +36,17 @@ for f in sftp-handler sftphprefs; do
 	fi
 done
 
+# every release says what changed: the readme and the guide need an entry
+# for this version
+if ! grep -q "^- $ver (" "$ROOT/package/SFTPHandler.readme"; then
+	echo "package/SFTPHandler.readme has no History entry \"- $ver (...)\"" >&2
+	exit 1
+fi
+if ! grep -q "^@{b}$ver (" "$ROOT/package/SFTPHandler/SFTPHandler.guide"; then
+	echo "SFTPHandler.guide has no History entry for $ver" >&2
+	exit 1
+fi
+
 rm -rf "$STAGE"
 D="$STAGE/SFTPHandler"
 mkdir -p "$D/L" "$D/Prefs" "$D/Devs/DOSDrivers" "$ROOT/dist"
@@ -46,7 +57,6 @@ cp "$ROOT/package/SFTPHandler/Install" "$D/"
 cp "$ROOT/package/SFTPHandler/Devs/DOSDrivers/SFTP" "$D/Devs/DOSDrivers/"
 # AmigaGuide and readme in Latin-1, as AmigaOS reads them
 sed -e "s/^@\$VER: SFTPHandler.guide [0-9.]* ([0-9.]*)/@\$VER: SFTPHandler.guide $ver ($amigadate)/" \
-    -e "s/^@{b}0\.x (15\.11\.2026)@{ub}/@{b}$ver ($amigadate)@{ub}/" \
 	"$ROOT/package/SFTPHandler/SFTPHandler.guide" | iconv -f UTF-8 -t ISO-8859-1 > "$D/SFTPHandler.guide"
 cp "$ROOT/UNLICENSE" "$D/LICENSE.txt"
 sed -e "s/@VERSION@/$ver/" -e "s/@DATE@/$isodate/" "$ROOT/package/SFTPHandler.readme" |

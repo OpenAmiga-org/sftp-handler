@@ -213,9 +213,10 @@ sites.xml is plain XML (UTF-8):
 @node History "History"
 @{b}History@{ub}
 
-@{b}0.x (15.11.2026)@{ub}
- - First version: handler (filesysbox, clib4, libssh2 with AmiSSL) and sftphprefs with Test connection.
- - SFTP much faster over the internet: reads that follow each other are fetched ahead in growing blocks, and writes are collected (up to 1 MB) and sent together, instead of waiting for the server after every block. With 20 ms to the server: about 25 MB/s up and 45 MB/s down instead of 0.2-8 MB/s.
+@{b}0.9 (15.11.2026)@{ub}
+ - First release: handler (filesysbox, clib4, libssh2 with AmiSSL) and sftphprefs with Test connection.
+ - SFTP reads ahead in growing blocks and collects writes (up to 1 MB) instead of waiting for the server after every block: with 20 ms to the server about 25 MB/s up and 45 MB/s down instead of 0.2-8 MB/s.
+ - Install can update an installation that is in use: it stops SFTP: (Dismount) and mounts it again.
 @endnode
 
 @node Licence "Licence"

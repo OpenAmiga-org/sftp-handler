@@ -52,5 +52,10 @@ Requirements (not included, get them from OS4Depot):
 Installation: double-click Install, then start SYS:Prefs/sftphprefs and
 add your sites. SFTPHandler.guide has all the details.
 
+History:
+
+- 0.9 (2026-11-15): first release. Install can update an installation
+  that is in use (it stops SFTP: and mounts it again).
+
 sftp-handler is public domain. It contains libssh2 (BSD licence) and
 Expat (MIT licence); see Third-party.txt.
