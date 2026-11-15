@@ -27,10 +27,10 @@ build/linux/sftph-fuse: $(CORE_SRC) $(CORE_HDR) src/linux/main.c src/linux/platf
 		-o $@ $(CORE_SRC) src/linux/main.c src/linux/platform_linux.c \
 		$(shell pkg-config --libs $(PKGS))
 
-build/unit/unit_tests: tests/unit_tests.c src/core/ftplist.c src/core/config.c src/core/util.c $(CORE_HDR)
+build/unit/unit_tests: tests/unit_tests.c src/core/ftplist.c src/core/config.c src/core/util.c src/core/charset.c $(CORE_HDR)
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(WARN) -fsanitize=address,undefined -Isrc/core -o $@ \
-		tests/unit_tests.c src/core/ftplist.c src/core/config.c src/core/util.c -lexpat
+		tests/unit_tests.c src/core/ftplist.c src/core/config.c src/core/util.c src/core/charset.c -lexpat
 
 unit: build/unit/unit_tests
 	build/unit/unit_tests

@@ -1,5 +1,6 @@
 /* sftp-handler - unit tests: FTP listing lines, the site file, names.
  * Public domain. */
+#include "charset.h"
 #include "config.h"
 #include "ftplist.h"
 #include "util.h"
@@ -160,8 +161,27 @@ static void test_config(void)
 	}
 }
 
+static void test_strings(void)
+{
+	char *junk = malloc(64), *e;
+
+	/* an empty result must be "", not what the memory held before */
+	strcpy(junk, "leftover text");
+	free(junk);
+	e = cs_utf8_to_local(CS_ISO_8859_1, "");
+	CHECK(e != NULL && e[0] == '\0');
+	free(e);
+	e = cs_local_to_utf8(CS_ISO_8859_1, "");
+	CHECK(e != NULL && e[0] == '\0');
+	free(e);
+	e = cs_local_to_utf8(CS_ISO_8859_1, "\xe5");
+	CHECK(e != NULL && strcmp(e, "\xc3\xa5") == 0);
+	free(e);
+}
+
 int main(void)
 {
+	test_strings();
 	test_list();
 	test_config();
 	printf("%s (%d failed)\n", fails ? "FAILED" : "unit tests passed", fails);

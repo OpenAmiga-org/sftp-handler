@@ -1,6 +1,5 @@
 # AmigaOS 4 build rules, run inside the cross-compiler image by
-# tools/build_os4.sh. The handler is built with clib4 (needs clib4.library
-# at run time), sftphprefs with newlib.
+# tools/build_os4.sh. Built with clib4 (needs clib4.library at run time).
 
 SDK      = /opt/ppc-amigaos/ppc-amigaos/SDK
 CC       = ppc-amigaos-gcc
@@ -26,10 +25,10 @@ OS4_SRC  = src/os4/main.c src/os4/platform_os4.c src/os4/requesters.c src/os4/am
 GLUE_SRC = src/os4/fbxglue.c
 GLUE_FLAGS = -fno-builtin -fno-tree-loop-distribute-patterns
 
-PREFS_SRC = src/prefs/sftphprefs.c src/core/config.c src/core/util.c src/core/charset.c
-PREFS_CFLAGS = -O2 -g $(WARN) -std=gnu11 -mcrt=newlib -Isrc/core -Isrc/prefs \
-           -I$(SDK)/local/common/include
-PREFS_LDFLAGS = -mcrt=newlib -L$(SDK)/local/newlib/lib
+# sftphprefs tests connections with the handler's own code
+PREFS_SRC = src/prefs/sftphprefs.c src/core/util.c src/core/charset.c src/core/config.c \
+            src/core/net.c src/core/ftplist.c src/core/ftp.c src/core/sftp.c \
+            src/os4/platform_os4.c src/os4/requesters.c src/os4/amissl.c
 
 .PHONY: handler prefs nettest
 
@@ -48,8 +47,8 @@ build/os4/sftp-handler: $(CORE_SRC) $(OS4_SRC) build/os4/fbxglue.o $(wildcard sr
 
 prefs: build/os4/sftphprefs
 
-build/os4/sftphprefs: $(PREFS_SRC) $(wildcard src/core/*.h src/prefs/*.h)
-	$(CC) $(PREFS_CFLAGS) -o $@.debug $(PREFS_SRC) $(PREFS_LDFLAGS) -lexpat -lauto
+build/os4/sftphprefs: $(PREFS_SRC) $(wildcard src/core/*.h src/os4/*.h)
+	$(CC) $(CFLAGS) -o $@.debug $(PREFS_SRC) $(LDFLAGS) $(LIBS)
 	$(STRIP) $(STRIPFLAGS) -o $@ $@.debug
 
 nettest: build/os4/nettest
