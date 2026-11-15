@@ -331,10 +331,69 @@ def t_reconnect(k, d):
     assert read(srv(k, "after")) == b"a"
 
 
+def t_write_behind(k, d):
+    p = os.path.join(d, "wb.bin")
+    data = random.Random(7).randbytes(300000)
+    f = open(p, "wb", buffering=0)
+    for i in range(0, len(data), 4096):
+        f.write(data[i:i + 4096])
+    # another open sees everything written so far
+    with open(p, "rb") as g:
+        assert g.read() == data
+    f.close()
+    if k == "SFTP":
+        # read back through the same handle (r+); FTP has no such handle
+        with open(p, "r+b", buffering=0) as h:
+            h.seek(1000)
+            h.write(b"ABC")
+            h.seek(990)
+            assert h.read(20) == data[990:1000] + b"ABC" + data[1003:1010]
+    # a date set while the file is still open stays after the close
+    with open(os.path.join(d, "dated.bin"), "wb", buffering=0) as f:
+        f.write(b"x" * 5000)
+        os.utime(os.path.join(d, "dated.bin"), (1400000000, 1400000000))
+    if k == "SFTP":
+        assert int(os.path.getmtime(srv(k, "dated.bin"))) == 1400000000
+        assert os.path.getsize(srv(k, "dated.bin")) == 5000
+
+
+WRITER = """
+import sys
+f = open(sys.argv[1], "wb", buffering=0)
+f.write(b"y" * 100000)          # held by the handler (write-behind)
+print("written", flush=True)
+sys.stdin.readline()            # the server goes away meanwhile
+try:
+    f.close()
+    print("close ok", flush=True)
+except OSError as e:
+    print("close error", e.errno, flush=True)
+"""
+
+
+def t_write_behind_lost(k, d):
+    if k != "SFTP":
+        return
+    # a process of its own: a fork in this one (docker restart) would
+    # flush the file early through the copy of its descriptor
+    w = subprocess.Popen([sys.executable, "-I", "-c", WRITER, os.path.join(d, "lost.bin")],
+                         stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+    assert w.stdout.readline().strip() == "written"
+    subprocess.run(["docker", "restart", "-t", "1", "sftph-sftp"], check=True,
+                   stdout=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+    time.sleep(2)
+    out, _ = w.communicate("go\n", timeout=120)
+    time.sleep(0.5)
+    log = read(os.path.join(WORK, "fuse.log"), "r")
+    # the loss is reported: an error from close() and the requester text
+    assert out.startswith("close error") and "may be incomplete" in log, (out, log[-300:])
+
+
 SITE_TESTS = [t_small_file, t_names, t_case_insensitive, t_overwrite, t_update_in_place,
               t_empty_file, t_truncate, t_large_and_seeks, t_two_readers, t_copy_on_site,
               t_mkdir_rmdir, t_rmdir_sees_server_files, t_rename, t_unlink, t_mtime, t_chmod,
-              t_server_changes_seen, t_many_files, t_reconnect]
+              t_server_changes_seen, t_many_files, t_write_behind, t_write_behind_lost,
+              t_reconnect]
 
 
 # --- tests of the root and the set-up -----------------------------------------

@@ -1217,6 +1217,7 @@ static const remote_ops ftp_ops = {
 	.pread     = ftp_pread,
 	.pwrite    = ftp_pwrite,
 	.ftruncate = ftp_ftruncate,
+	.fflush    = NULL,
 	.fclose    = ftp_fclose,
 	.upload    = ftp_upload,
 	.idle      = ftp_idle,

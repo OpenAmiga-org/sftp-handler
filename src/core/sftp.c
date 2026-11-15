@@ -24,9 +24,27 @@ typedef struct {
 	int              statvfs;      /* 1 works, 0 does not, -1 not tried */
 } sftp_remote;
 
+/* Reads and writes are each a round trip to the server. Amiga programs
+ * often read and write a few KB at a time, so a handle reads ahead in
+ * growing blocks and collects writes, and libssh2 then keeps many requests
+ * in flight. */
+#define RA_MIN   (32 * 1024)     /* first read-ahead block */
+#define RA_MAX   (512 * 1024)    /* largest; libssh2 asks for 4x ahead */
+#define WB_SIZE  (1024 * 1024)   /* write-behind buffer */
+
 struct rhandle {
 	LIBSSH2_SFTP_HANDLE *h;
-	int64_t              pos;
+	int64_t              pos;      /* libssh2's position, -1 = unknown */
+	/* read-ahead */
+	char                *rb;
+	size_t               rb_len;
+	int64_t              rb_off;
+	size_t               ra;       /* current block size, grows */
+	int64_t              next;     /* where a sequential read continues */
+	/* write-behind */
+	char                *wb;
+	size_t               wb_len;
+	int64_t              wb_off;
 };
 
 static int global_ready;
@@ -424,12 +442,11 @@ static void seek_to(rhandle *h, int64_t off)
 	}
 }
 
-static int sftp_pread(remote *r, rhandle *h, char *buf, size_t len, int64_t off)
+/* reads len bytes at off (less at the end of the file) */
+static int raw_read(sftp_remote *sr, rhandle *h, char *buf, size_t len, int64_t off)
 {
-	sftp_remote *sr = (sftp_remote *)r;
 	size_t got = 0;
 
-	ALIVE(sr);
 	seek_to(h, off);
 	while (got < len) {
 		ssize_t n = libssh2_sftp_read(h->h, buf + got, len - got);
@@ -449,14 +466,14 @@ static int sftp_pread(remote *r, rhandle *h, char *buf, size_t len, int64_t off)
 	return (int)got;
 }
 
-static int sftp_pwrite(remote *r, rhandle *h, const char *buf, size_t len, int64_t off)
+static int raw_write(sftp_remote *sr, rhandle *h, const char *buf, size_t len, int64_t off)
 {
-	sftp_remote *sr = (sftp_remote *)r;
 	size_t done = 0;
 
-	ALIVE(sr);
 	seek_to(h, off);
 	while (done < len) {
+		/* libssh2 sends the whole buffer at once and returns when the
+		 * first part is acknowledged; the rest stays in flight */
 		ssize_t n = libssh2_sftp_write(h->h, buf + done, len - done);
 
 		if (n <= 0) {
@@ -471,12 +488,124 @@ static int sftp_pwrite(remote *r, rhandle *h, const char *buf, size_t len, int64
 	return (int)done;
 }
 
+static int write_flush(sftp_remote *sr, rhandle *h)
+{
+	int rc = 0;
+
+	if (h->wb_len > 0) {
+		rc = raw_write(sr, h, h->wb, h->wb_len, h->wb_off);
+		h->wb_len = 0;
+		if (rc > 0)
+			rc = 0;
+	}
+	return rc;
+}
+
+static int sftp_pread(remote *r, rhandle *h, char *buf, size_t len, int64_t off)
+{
+	sftp_remote *sr = (sftp_remote *)r;
+	size_t got = 0;
+	int rc;
+
+	ALIVE(sr);
+	rc = write_flush(sr, h);
+	if (rc != 0)
+		return rc;
+	/* grow the blocks while the reads follow each other, start small
+	 * again after a jump */
+	if (off == h->next) {
+		if (h->ra < RA_MAX)
+			h->ra = h->ra == 0 ? RA_MIN : h->ra * 2;
+	} else {
+		h->ra = RA_MIN;
+	}
+	h->next = off + (int64_t)len;
+	while (got < len) {
+		int64_t at = off + (int64_t)got;
+		size_t want = len - got;
+
+		if (h->rb_len > 0 && at >= h->rb_off && at < h->rb_off + (int64_t)h->rb_len) {
+			size_t from = (size_t)(at - h->rb_off), n = h->rb_len - from;
+
+			if (n > want)
+				n = want;
+			memcpy(buf + got, h->rb + from, n);
+			got += n;
+			continue;
+		}
+		if (want >= h->ra) {
+			/* big enough by itself: straight into the caller's buffer */
+			rc = raw_read(sr, h, buf + got, want, at);
+			if (rc < 0)
+				return got > 0 ? (int)got : rc;
+			got += (size_t)rc;
+			break;
+		}
+		if (h->rb == NULL) {
+			h->rb = malloc(RA_MAX);
+			if (h->rb == NULL)
+				return got > 0 ? (int)got : -ENOMEM;
+		}
+		h->rb_len = 0;
+		rc = raw_read(sr, h, h->rb, h->ra, at);
+		if (rc < 0)
+			return got > 0 ? (int)got : rc;
+		h->rb_off = at;
+		h->rb_len = (size_t)rc;
+		if (rc == 0)
+			break; /* end of the file */
+	}
+	return (int)got;
+}
+
+static int sftp_pwrite(remote *r, rhandle *h, const char *buf, size_t len, int64_t off)
+{
+	sftp_remote *sr = (sftp_remote *)r;
+	int rc;
+
+	ALIVE(sr);
+	/* what was read ahead may change */
+	h->rb_len = 0;
+	if (h->wb_len > 0 && (off != h->wb_off + (int64_t)h->wb_len || h->wb_len + len > WB_SIZE)) {
+		rc = write_flush(sr, h);
+		if (rc != 0)
+			return rc;
+	}
+	if (len >= WB_SIZE)
+		return raw_write(sr, h, buf, len, off);
+	if (h->wb == NULL) {
+		h->wb = malloc(WB_SIZE);
+		if (h->wb == NULL)
+			return raw_write(sr, h, buf, len, off);
+	}
+	if (h->wb_len == 0)
+		h->wb_off = off;
+	memcpy(h->wb + h->wb_len, buf, len);
+	h->wb_len += len;
+	return (int)len;
+}
+
+static int sftp_fflush(remote *r, rhandle *h)
+{
+	sftp_remote *sr = (sftp_remote *)r;
+
+	if (h->wb_len == 0)
+		return 0;
+	ALIVE(sr);
+	return write_flush(sr, h);
+}
+
 static int sftp_ftruncate(remote *r, rhandle *h, int64_t size)
 {
 	sftp_remote *sr = (sftp_remote *)r;
 	LIBSSH2_SFTP_ATTRIBUTES a;
+	int rc;
 
 	ALIVE(sr);
+	rc = write_flush(sr, h);
+	if (rc != 0)
+		return rc;
+	h->rb_len = 0;
 	memset(&a, 0, sizeof(a));
 	a.flags = LIBSSH2_SFTP_ATTR_SIZE;
 	a.filesize = (libssh2_uint64_t)size;
@@ -490,8 +619,20 @@ static int sftp_fclose(remote *r, rhandle *h)
 	sftp_remote *sr = (sftp_remote *)r;
 	int rc = 0;
 
-	if (!sr->dead && libssh2_sftp_close(h->h) != 0)
-		rc = last_err(sr);
+	if (!sr->dead) {
+		rc = write_flush(sr, h);
+		if (!sr->dead && libssh2_sftp_close(h->h) != 0 && rc == 0) {
+			rc = last_err(sr);
+			/* everything sent was acknowledged: a connection lost only
+			 * now loses nothing (the server closes the file itself) */
+			if (rc == -ENOTCONN)
+				rc = 0;
+		}
+	} else if (h->wb_len > 0) {
+		rc = -ENOTCONN;   /* collected data could not be sent */
+	}
+	free(h->rb);
+	free(h->wb);
 	free(h);
 	return rc;
 }
@@ -532,6 +673,7 @@ static const remote_ops sftp_ops = {
 	.pread     = sftp_pread,
 	.pwrite    = sftp_pwrite,
 	.ftruncate = sftp_ftruncate,
+	.fflush    = sftp_fflush,
 	.fclose    = sftp_fclose,
 	.upload    = sftp_upload,
 	.idle      = sftp_idle,

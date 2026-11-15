@@ -47,12 +47,12 @@ async def upload(fleet, local, remote):
     assert r.model_dump().get("sha256_verified"), remote
 
 
-async def main():
-    fleet = Fleet(load_config())
-    m = McpdTransport(McpdChannel(enabled=True, endpoint="127.0.0.1:4422"))
+async def setup(fleet, m, mount=True):
+    """clib4 2.5 first in LIBS:, the build mounted as SFTP: (RAM:sftph)."""
     work = os.path.join(ROOT, "build", "guest")
     os.makedirs(work, exist_ok=True)
     big = os.path.join(work, "big5.bin")
+    os.makedirs(work, exist_ok=True)
     if not os.path.exists(big):
         with open(big, "wb") as f:
             f.write(os.urandom(5 * 1024 * 1024 + 77))
@@ -73,16 +73,27 @@ async def main():
               "Version clib4.library"):
         rc, out = await cmd(m, c)
     print("clib4:", out.strip())
-    if "--no-mount" not in sys.argv:
+    if mount:
         # the old handler ends; DOS loads the new one on the next access
         rc, out = await cmd(m, "Dismount SFTP:")
         print("dismount:", rc, out.strip())
-        await upload(fleet, os.path.join(ROOT, "build", "os4", "sftp-handler"), "RAM:sftph/" + handler)
+        # SFH_HANDLER: another build to test (default build/os4/sftp-handler)
+        binary = os.environ.get("SFH_HANDLER", os.path.join(ROOT, "build", "os4", "sftp-handler"))
+        print("handler:", binary)
+        await upload(fleet, binary, "RAM:sftph/" + handler)
         await upload(fleet, os.path.join(work, "sites.xml"), "RAM:sftph/cfg/sites.xml")
         await upload(fleet, os.path.join(work, "known_hosts"), "RAM:sftph/cfg/known_hosts")
         await upload(fleet, os.path.join(work, "SFTP"), "RAM:sftph/SFTP")
         rc, out = await cmd(m, "Mount RAM:sftph/SFTP")
         print("mount:", rc, out.strip())
+    return work
+
+
+async def main():
+    fleet = Fleet(load_config())
+    m = McpdTransport(McpdChannel(enabled=True, endpoint="127.0.0.1:4422"))
+    work = await setup(fleet, m, "--no-mount" not in sys.argv)
+    big = os.path.join(work, "big5.bin")
     await upload(fleet, big, "RAM:sftph/big5.bin")
     await upload(fleet, os.path.join(ROOT, "tests", "os4", "functional.script"), "RAM:sftph/functional.script")
     want = hashlib.sha256(open(big, "rb").read()).hexdigest()
@@ -104,4 +115,5 @@ async def main():
     return 0 if ok else 1
 
 
-sys.exit(asyncio.run(main()))
+if __name__ == "__main__":
+    sys.exit(asyncio.run(main()))

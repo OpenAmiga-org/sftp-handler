@@ -15,6 +15,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 IMAGE="${OS4_IMAGE:-walkero/amigagccondocker:os4-gcc15-3.6.1}"
 DEPS="$ROOT/build/deps"
 SSH2_VER=1.11.1
+# SSH2_POLL=yes builds libssh2 with poll() (clib4 maps it to select());
+# the default waits with select() directly
+SSH2_POLL="${SSH2_POLL:-no}"
+SSH2_PREFIX="${SSH2_PREFIX:-libssh2-amissl}"
 SSH2_SHA256=9954cb54c4f548198a7cbebad248bdc87dd64bd26185708a294b2b50771e3769
 AMISSL_VER=5.27
 LHA="${LHA:-$HOME/linux_archivers/lha/lha}"
@@ -32,7 +36,7 @@ if [ ! -d amissl-sdk/AmiSSL ]; then
 	(cd amissl-sdk && "$LHA" xq "../AmiSSL-$AMISSL_VER-SDK.lha" >/dev/null)
 fi
 
-rm -rf ssh2-build libssh2-amissl amissl-clib4
+rm -rf ssh2-build "$SSH2_PREFIX" amissl-clib4
 mkdir -p ssh2-build amissl-clib4
 cat > amissl-clib4/amisslauto.c <<'EOF'
 /* stands in for the AmiSSL SDK's libamisslauto.a, which has no clib4 build */
@@ -49,7 +53,9 @@ docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT":/src -w /src/buil
 	ppc-amigaos-ar rcs amissl-clib4/libssl.a amissl-clib4/dummy.o
 	ppc-amigaos-ar rcs amissl-clib4/libcrypto.a amissl-clib4/dummy.o
 	cd ssh2-build
-	../libssh2-'"$SSH2_VER"'/configure --host=ppc-amigaos --prefix=/src/build/deps/libssh2-amissl \
+	POLLVAR=""
+	[ "'"$SSH2_POLL"'" = yes ] || POLLVAR="ac_cv_func_poll=no"
+	../libssh2-'"$SSH2_VER"'/configure --host=ppc-amigaos --prefix=/src/build/deps/'"$SSH2_PREFIX"' $POLLVAR \
 		CC=ppc-amigaos-gcc AR=ppc-amigaos-ar RANLIB=ppc-amigaos-ranlib \
 		CPPFLAGS="-I$AM/include" CFLAGS="-mcrt=clib4 -O2" \
 		LDFLAGS="-mcrt=clib4 -L$AM/lib/AmigaOS4 -L/src/build/deps/amissl-clib4" \
@@ -61,8 +67,9 @@ docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT":/src -w /src/buil
 	make -C src -j8 > make.log 2>&1 || { tail -30 make.log; exit 1; }
 	make -C src install > /dev/null
 ' < /dev/null
-mkdir -p libssh2-amissl/include
-cp "libssh2-$SSH2_VER"/include/*.h libssh2-amissl/include/
+grep -E "define HAVE_(POLL|SELECT)" ssh2-build/src/libssh2_config.h || true
+mkdir -p "$SSH2_PREFIX/include"
+cp "libssh2-$SSH2_VER"/include/*.h "$SSH2_PREFIX/include/"
 mkdir -p licenses
 cp "libssh2-$SSH2_VER/COPYING" licenses/libssh2-COPYING
-ls -la libssh2-amissl/lib/libssh2.a
+ls -la "$SSH2_PREFIX/lib/libssh2.a"

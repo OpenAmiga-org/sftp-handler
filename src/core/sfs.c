@@ -75,6 +75,7 @@ struct sfs_file {
 	time_t    mtime;
 	time_t    set_mtime;     /* date to set after the upload */
 	int       mode;
+	int       lost;          /* collected writes were lost with a connection */
 };
 
 struct sfs {
@@ -269,16 +270,46 @@ static void list_remove(site *s, const char *path)
 
 /* --- sites and connections -------------------------------------------------- */
 
+static void drop_remote(sfs *fs, site *s);
+
 static void close_handles(sfs *fs, site *s)
 {
 	sfs_file *f;
 
 	for (f = fs->files; f != NULL; f = f->next) {
 		if (f->s == s && f->h != NULL) {
-			s->r->ops->fclose(s->r, f->h);
+			if (s->r->ops->fclose(s->r, f->h) != 0 && f->hmode != RO_READ)
+				f->lost = 1;
 			f->h = NULL;
 		}
 	}
+}
+
+/* sends what open handles of a file still hold (SFTP collects writes), so
+ * that the server has it all before the file is used another way */
+static int flush_path(sfs *fs, site *s, const char *path)
+{
+	sfs_file *f;
+	int rc = 0;
+
+	if (s->r == NULL || s->r->ops->fflush == NULL)
+		return 0;
+	for (f = fs->files; f != NULL; f = f->next) {
+		if (f->s == s && f->h != NULL && f->hmode != RO_READ &&
+		    (path == NULL || strcmp(f->path, path) == 0)) {
+			int e = s->r->ops->fflush(s->r, f->h);
+
+			if (e != 0 && rc == 0)
+				rc = e;
+			if (e == -ENOTCONN)
+				break;
+		}
+	}
+	if (rc == -ENOTCONN) {
+		drop_remote(fs, s);
+		rc = -EIO;
+	}
+	return rc;
 }
 
 static void drop_remote(sfs *fs, site *s)
@@ -1300,6 +1331,8 @@ int sfs_open(sfs *fs, const char *path, int write, sfs_file **fh)
 		rc = -EISDIR;
 		goto out;
 	}
+	/* another handle may still hold writes to it */
+	flush_path(fs, w.s, real);
 	f = file_new(fs, w.s, real);
 	real = NULL;
 	if (f == NULL) {
@@ -1427,6 +1460,15 @@ int sfs_read(sfs *fs, sfs_file *f, char *buf, size_t size, int64_t off)
 		return 0;
 	if (f->tf != NULL)
 		return tmpf_pread(f->tf, buf, size, off);
+	/* FTP: another handle is writing this file; its contents are in that
+	 * handle's temp file until it is closed */
+	{
+		sfs_file *w;
+
+		for (w = fs->files; w != NULL; w = w->next)
+			if (w != f && w->s == s && w->tf != NULL && w->dirty && strcmp(w->path, f->path) == 0)
+				return tmpf_pread(w->tf, buf, size, off);
+	}
 	/* FTP cannot read past the end cheaply: the listing knows the size */
 	if (s->cfg.protocol == PROTO_FTP && f->size > 0 && off >= f->size)
 		return 0;
@@ -1542,7 +1584,11 @@ int sfs_write(sfs *fs, sfs_file *f, const char *buf, size_t size, int64_t off)
 		rc = s->r->ops->pwrite(s->r, f->h, buf, size, off);
 		if (rc != -ENOTCONN)
 			break;
+		/* writes collected before this one are gone with the connection:
+		 * trying again would leave a hole, so this write fails */
 		drop_remote(fs, s);
+		f->lost = 1;
+		return -EIO;
 	}
 	if (rc > 0) {
 		if (off + rc > f->size)
@@ -1655,7 +1701,18 @@ static int upload(sfs *fs, sfs_file *f)
 
 int sfs_flush(sfs *fs, sfs_file *f)
 {
-	if (f->icon || f->tf == NULL || !f->dirty)
+	if (f->icon)
+		return 0;
+	if (f->h != NULL && f->hmode != RO_READ && f->s->r != NULL && f->s->r->ops->fflush != NULL) {
+		int rc = f->s->r->ops->fflush(f->s->r, f->h);
+
+		if (rc == -ENOTCONN) {
+			drop_remote(fs, f->s);
+			return -EIO;
+		}
+		return rc;
+	}
+	if (f->tf == NULL || !f->dirty)
 		return 0;
 	return upload(fs, f);
 }
@@ -1692,8 +1749,28 @@ int sfs_release(sfs *fs, sfs_file *f)
 	}
 	if (f->tf != NULL)
 		tmpf_close(f->tf);
-	if (f->h != NULL && s != NULL && s->r != NULL)
-		s->r->ops->fclose(s->r, f->h);
+	if (f->h != NULL && s != NULL && s->r != NULL) {
+		int e = s->r->ops->fclose(s->r, f->h);
+
+		f->h = NULL;
+		if (e != 0 && f->hmode != RO_READ) {
+			f->lost = 1;
+			if (rc == 0)
+				rc = e;
+			if (e == -ENOTCONN)
+				drop_remote(fs, s);
+		}
+	}
+	if (f->lost && s != NULL) {
+		char msg[1200];
+
+		/* filesysbox does not pass errors from Close on */
+		snprintf(msg, sizeof(msg), "%s%s may be incomplete on the server:\n"
+		         "the last data written could not be sent (%s).\n\n"
+		         "Save or copy the file again.", s->cfg.name, f->path,
+		         s->r != NULL && s->r->error[0] != '\0' ? s->r->error : "connection lost");
+		report(fs, s, msg);
+	}
 	for (pp = &fs->files; *pp != NULL; pp = &(*pp)->next) {
 		if (*pp == f) {
 			*pp = f->next;
@@ -1982,6 +2059,8 @@ int sfs_utimens(sfs *fs, const char *path, time_t mtime)
 			goto out;
 		}
 	}
+	/* data sent later would change the date again */
+	flush_path(fs, w.s, real);
 	RUN(fs, w.s, rc, w.s->r->ops->set_mtime(w.s->r, real, mtime));
 	if (rc == -ENOSYS)
 		rc = 0;   /* the server cannot: not worth an error */

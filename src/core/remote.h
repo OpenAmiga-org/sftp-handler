@@ -76,6 +76,9 @@ typedef struct {
 	int  (*pread)(remote *r, rhandle *h, char *buf, size_t len, int64_t off);
 	int  (*pwrite)(remote *r, rhandle *h, const char *buf, size_t len, int64_t off);
 	int  (*ftruncate)(remote *r, rhandle *h, int64_t size);
+	/* sends writes the handle still holds; NULL when it holds none */
+	int  (*fflush)(remote *r, rhandle *h);
+	/* also sends what is held; an error means data may be lost */
 	int  (*fclose)(remote *r, rhandle *h);
 	int  (*upload)(remote *r, const char *path, rsource_fn src, void *ud);
 	/* called now and then while idle; 0, or -ENOTCONN when it is gone */
