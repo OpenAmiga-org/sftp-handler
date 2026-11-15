@@ -68,6 +68,8 @@ Double-click @{b}Install@{ub}. It copies
 and the documentation. Then start sftphprefs and add your sites.
 
 By hand: copy the same files, then @{b}Mount DEVS:DOSDrivers/SFTP@{ub}.
+
+Updating: run Install again. While SFTP: is mounted its handler keeps L:sftp-handler in use, so Install stops it (Dismount SFTP:) and mounts it again at the end; close any files open on SFTP: first. By hand: @{b}Dismount SFTP:@{ub}, copy, @{b}Mount DEVS:DOSDrivers/SFTP@{ub}.
 @endnode
 
 @node Prefs "sftphprefs"

@@ -50,6 +50,35 @@
 
 ; --- programs -------------------------------------------------------------
 
+; leftovers of an earlier install (see P_FREE), now no longer in use
+(run "C:Delete >NIL: QUIET L:sftp-handler.old SYS:Prefs/sftphprefs.old")
+
+; A running handler keeps L:sftp-handler in use: it cannot be replaced
+; while SFTP: is mounted. Stop it first; it is mounted again at the end.
+(set #wasmounted (= 0 (run "C:Assign >NIL: SFTP: EXISTS")))
+(if #wasmounted
+  (
+    (message "SFTP: is mounted. To replace the handler, the installer "
+             "stops it now and mounts it again at the end.\n\n"
+             "Close any files you have open on SFTP: first.")
+    (run "C:Dismount >NIL: SFTP:")
+  )
+)
+
+; A file that is still in use (SFTP: could not be stopped, or sftphprefs is
+; running) is moved aside, so that the new one can be copied in; the old
+; one goes with the next restart.
+(procedure P_FREE #file
+  (if (exists #file)
+    (if (<> 0 (run (cat "C:Delete >NIL: QUIET \"" #file "\"")))
+      (
+        (run (cat "C:Delete >NIL: QUIET \"" #file ".old\""))
+        (run (cat "C:Rename >NIL: \"" #file "\" \"" #file ".old\""))
+      )
+    )
+  )
+)
+(P_FREE "L:sftp-handler")
 (copyfiles
   (prompt "Copying sftp-handler to L:")
   (help @copyfiles-help)
@@ -57,6 +86,7 @@
   (dest "L:")
   (confirm "expert"))
 
+(P_FREE "SYS:Prefs/sftphprefs")
 (copyfiles
   (prompt "Copying the prefs program sftphprefs to SYS:Prefs")
   (help @copyfiles-help)
@@ -115,13 +145,22 @@
 
 ; --- mount now ----------------------------------------------------------
 
+; the DOSDriver to mount: the one just copied, or the one that was there
+(set #ddfile "")
 (if (<> #dddest "")
-  (if (= 0 (run "C:Assign >NIL: SFTP: EXISTS"))
-    (message "SFTP: is mounted already. The new handler is used after the computer restarts.")
-    (run (cat "C:Mount " (tackon #dddest "SFTP")))
-  )
-)
+  (set #ddfile (tackon #dddest "SFTP"))
+  (if (exists "DEVS:DOSDrivers/SFTP")
+    (set #ddfile "DEVS:DOSDrivers/SFTP")
+    (if (exists "SYS:Storage/DOSDrivers/SFTP")
+      (set #ddfile "SYS:Storage/DOSDrivers/SFTP"))))
 
+(if (= 0 (run "C:Assign >NIL: SFTP: EXISTS"))
+  ; still mounted: Dismount did not work (files open on SFTP:)
+  (message "SFTP: could not be stopped, so the old handler keeps running. "
+           "The new one is used after the computer restarts.")
+  (if (and (<> #ddfile "") (or #wasmounted (<> #dddest "")))
+    (run (cat "C:Mount " #ddfile)))
+)
 (if (askbool
       (prompt "Start sftphprefs now to add your sites?")
       (help @askbool-help)
