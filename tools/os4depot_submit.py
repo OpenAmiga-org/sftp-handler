@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
-"""Submit sftp-handler to OS4Depot (new file, category driver/handler).
-Submissions wait in the maintainer's queue until approved.
+"""Submit a new sftp-handler version to OS4Depot, replacing the published
+one (driver/handler/sftphandler.lha, OS4Depot file id 14271; 0.9 was the
+first). Submissions wait in the maintainer's queue until approved.
 
   tools/os4depot_submit.py           show what would be sent (nothing is sent)
   tools/os4depot_submit.py --send    send it (multipart POST, like the web form);
                                      OS4DEPOT_EMAIL must be set (it is sent hidden)
 
 Run tools/make_lha.sh first: it writes dist/SFTPHandler.lha and build/stage/SFTPHandler.readme.
-For a later version, use the replace form (?function=submit&replace=<file id>) and set
-f_replaces to the published path.
 """
 import os
 import subprocess
@@ -17,7 +16,7 @@ import sys
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 ARCHIVE = os.path.join(ROOT, "dist", "SFTPHandler.lha")
 README = os.path.join(ROOT, "build", "stage", "SFTPHandler.readme")
-URL = "https://os4depot.net/index.php?function=submit&mode=go"  # a new file
+URL = "https://os4depot.net/index.php?function=submit&replace=14271&mode=go"  # replaces the published file
 
 readme = open(README, encoding="latin-1").read()
 head, body = readme.split("hend:\n", 1)
@@ -36,7 +35,7 @@ fields = [
     ("f_url", ""),
     ("f_donateurl", ""),
     ("f_category", meta["category"]),
-    ("f_replaces", ""),
+    ("f_replaces", "driver/handler/sftphandler.lha"),
     ("f_requirements", meta["requirements"]),
     ("f_license", meta["license"]),
     ("f_distributesubm", "selected"),
