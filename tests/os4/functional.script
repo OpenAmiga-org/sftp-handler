@@ -1,0 +1,43 @@
+.key SITE/A
+.bra {
+.ket }
+; sftp-handler functional test, run in the OS4 guest with SFTP: mounted:
+;   Execute RAM:sftph/functional.script "SFTP:Docker SFTP"
+; Needs RAM:sftph/big5.bin (5 MB).
+FailAt 21
+Echo "== upload"
+Copy RAM:sftph/big5.bin "{SITE}/big5.bin" CLONE QUIET
+Echo "== download"
+Copy "{SITE}/big5.bin" RAM:sftph/big5.back QUIET
+Echo "== compare (no output = same)"
+Cmp RAM:sftph/big5.bin RAM:sftph/big5.back
+Echo "== case"
+Type "{SITE}/HELLO.txt"
+Echo "== mkdir/copy/rename/date"
+MakeDir "{SITE}/NewDir"
+Copy "{SITE}/hello.txt" "{SITE}/NewDir/" QUIET
+Rename "{SITE}/NewDir/hello.txt" "{SITE}/NewDir/Renamed.txt"
+SetDate "{SITE}/NewDir/Renamed.txt" 01-Jan-20 12:00:00
+FileNote "{SITE}/NewDir/Renamed.txt" "A comment"
+Protect "{SITE}/NewDir/Renamed.txt" -w
+List "{SITE}/NewDir"
+Protect "{SITE}/NewDir/Renamed.txt" +w
+Echo "== delete full dir (must fail)"
+Delete "{SITE}/NewDir"
+Echo "== delete all"
+Delete "{SITE}/NewDir" ALL QUIET
+Echo "== append"
+Echo "line 1" >"{SITE}/append.txt"
+Echo "line 2" >>"{SITE}/append.txt"
+Type "{SITE}/append.txt"
+Echo "== rename onto existing (must fail)"
+Rename "{SITE}/append.txt" "{SITE}/hello.txt"
+Echo "== root (all must fail)"
+MakeDir SFTP:NewSite
+Copy "{SITE}/hello.txt" SFTP: QUIET
+Delete "{SITE}"
+Rename "{SITE}" SFTP:Other
+Echo "== cleanup"
+Delete "{SITE}/big5.bin" "{SITE}/append.txt" QUIET
+List "{SITE}"
+Echo "== done"

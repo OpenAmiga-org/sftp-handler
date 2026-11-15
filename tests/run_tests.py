@@ -291,9 +291,15 @@ def t_mtime(k, d):
 def t_chmod(k, d):
     p = os.path.join(d, "mode.txt")
     write(p, b"x")
-    os.chmod(p, 0o600)
+    os.chmod(srv(k, "mode.txt"), 0o644)
+    settle()
+    # only the owner's r and w bits reach the server
+    os.chmod(p, 0o444)
     if k == "SFTP":
-        assert os.stat(srv(k, "mode.txt")).st_mode & 0o777 == 0o600
+        assert os.stat(srv(k, "mode.txt")).st_mode & 0o777 == 0o444
+    os.chmod(p, 0o700)
+    if k == "SFTP":
+        assert os.stat(srv(k, "mode.txt")).st_mode & 0o777 == 0o644
 
 
 def t_server_changes_seen(k, d):
@@ -337,11 +343,13 @@ def t_root():
     names = sorted(os.listdir(MNT))
     assert names == ["Test FTP", "Test FTP.info", "Test SFTP", "Test SFTP.info"], names
     assert read(os.path.join(MNT, "Test FTP.info")) == b"ICON" * 10
-    expect_errno(errno.EACCES, write, os.path.join(MNT, "new"), b"x")
-    expect_errno(errno.EACCES, os.mkdir, os.path.join(MNT, "newdir"))
-    expect_errno(errno.EACCES, os.rmdir, os.path.join(MNT, "Test FTP"))
-    expect_errno(errno.EACCES, os.rename, os.path.join(MNT, "Test FTP"), os.path.join(MNT, "X"))
-    expect_errno(errno.EACCES, os.unlink, os.path.join(MNT, "Test FTP.info"))
+    expect_errno(errno.EROFS, write, os.path.join(MNT, "new"), b"x")
+    expect_errno(errno.EROFS, os.mkdir, os.path.join(MNT, "newdir"))
+    expect_errno(errno.EROFS, os.rmdir, os.path.join(MNT, "Test FTP"))
+    expect_errno(errno.EROFS, os.rename, os.path.join(MNT, "Test FTP"), os.path.join(MNT, "X"))
+    expect_errno(errno.EROFS, os.unlink, os.path.join(MNT, "Test FTP.info"))
+    expect_errno(errno.EROFS, os.rename, os.path.join(MNT, "Test FTP", "hello.txt"),
+                 os.path.join(MNT, "hello.txt"))
     expect_errno(errno.EXDEV, os.rename, os.path.join(MNT, "Test FTP", "hello.txt"),
                  os.path.join(MNT, "Test SFTP", "hello.txt"))
     # case-insensitive site names
@@ -369,8 +377,8 @@ def t_password_requester():
     # a wrong password and Cancel: "permission denied", no endless asking
     write_sites(sftp_pw="wrong", ftp_pw="wrong")
     with Mount():
-        expect_errno(errno.EACCES, os.listdir, site_dir("FTP"))
-        expect_errno(errno.EACCES, os.listdir, site_dir("SFTP"))
+        expect_errno(errno.ENODEV, os.listdir, site_dir("FTP"))
+        expect_errno(errno.ENODEV, os.listdir, site_dir("SFTP"))
     write_sites()
 
 
@@ -379,7 +387,7 @@ def t_hostkey():
     if os.path.exists(kh):
         os.unlink(kh)
     with Mount(env={"SFH_HOSTKEY": "refuse"}):
-        expect_errno(errno.EACCES, os.listdir, site_dir("SFTP"))
+        expect_errno(errno.ENODEV, os.listdir, site_dir("SFTP"))
     assert not os.path.exists(kh)
     with Mount(env={"SFH_HOSTKEY": "once"}):
         assert "hello.txt" in os.listdir(site_dir("SFTP"))
@@ -391,7 +399,7 @@ def t_hostkey():
     with open(kh, "w") as f:
         f.write("[127.0.0.1]:2222 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGzR8fkRDZRo8bWyzZJVrHeKmvMHc3oZa1zVa3N9mXkE\n")
     with Mount(env={"SFH_HOSTKEY": "refuse"}):
-        expect_errno(errno.EACCES, os.listdir, site_dir("SFTP"))
+        expect_errno(errno.ENODEV, os.listdir, site_dir("SFTP"))
     os.unlink(kh)
 
 

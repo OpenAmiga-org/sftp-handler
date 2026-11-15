@@ -528,7 +528,7 @@ static int need_remote(sfs *fs, site *s)
 	if (s->r != NULL)
 		return 0;
 	if (s->refused)
-		return -EACCES;
+		return ERR_OFFLINE;
 	if (s->last_fail != 0 && plat_ms() - s->last_fail < RETRY_MS)
 		return s->last_err;
 	if (s->cfg.protocol == PROTO_SFTP && s->cfg.user[0] == '\0') {
@@ -537,7 +537,7 @@ static int need_remote(sfs *fs, site *s)
 			report(fs, s, "SFTP needs a user name. Set it in sftphprefs.");
 		}
 		s->refused = 1;
-		return -EACCES;
+		return ERR_OFFLINE;
 	}
 	memset(&env, 0, sizeof(env));
 	env.ud = s;
@@ -562,7 +562,7 @@ static int need_remote(sfs *fs, site *s)
 				 * again until "DiskChange" or a change of the site */
 				s->refused = 1;
 				memset(s->password, 0, sizeof(s->password));
-				return -EACCES;
+				return ERR_OFFLINE;
 			}
 			asked++;
 			s->have_password = 1;
@@ -603,7 +603,7 @@ static int need_remote(sfs *fs, site *s)
 		report(fs, s, msg);
 	}
 	s->last_fail = plat_ms();
-	s->last_err = fail == RFAIL_LOGIN || fail == RFAIL_HOSTKEY ? -EACCES : ERR_OFFLINE;
+	s->last_err = ERR_OFFLINE;
 	return s->last_err;
 }
 
@@ -949,9 +949,11 @@ static void to_sfs_stat(sfs *fs, const rstat *r, sfs_stat *st)
 	st->readonly = fs->opt.readonly;
 }
 
-static void root_dir_stat(sfs_stat *st)
+/* the root and its entries carry the date of the site list */
+static void root_dir_stat(sfs *fs, sfs_stat *st)
 {
 	memset(st, 0, sizeof(*st));
+	st->mtime = fs->cfg_mtime;
 	st->is_dir = 1;
 	st->mode = 0555;
 	st->readonly = 1;
@@ -1080,11 +1082,12 @@ int sfs_getattr(sfs *fs, const char *path, sfs_stat *st)
 		goto out;
 	if (w.kind == AT_ROOT || (w.kind == AT_SITE && strcmp(w.rest, "/") == 0)) {
 		/* no connection for the root and the sites' own folders */
-		root_dir_stat(st);
+		root_dir_stat(fs, st);
 		goto out;
 	}
 	if (w.kind == AT_ICON) {
 		memset(st, 0, sizeof(*st));
+		st->mtime = fs->cfg_mtime;
 		st->size = (int64_t)fs->iconlen;
 		st->mode = 0444;
 		st->readonly = 1;
@@ -1127,7 +1130,7 @@ int sfs_readdir(sfs *fs, const char *path, sfs_fill_fn fill, void *ud)
 		load_config(fs, 1);
 		load_icon(fs);
 		for (k = 0; k < fs->nsites; k++) {
-			root_dir_stat(&st);
+			root_dir_stat(fs, &st);
 			if (fill(ud, fs->site[k]->cfg.name, &st) != 0)
 				goto out;
 		}
@@ -1136,6 +1139,7 @@ int sfs_readdir(sfs *fs, const char *path, sfs_fill_fn fill, void *ud)
 				char name[sizeof(fs->site[k]->cfg.name) + 6];
 
 				memset(&st, 0, sizeof(st));
+				st.mtime = fs->cfg_mtime;
 				st.size = (int64_t)fs->iconlen;
 				st.mode = 0444;
 				st.readonly = 1;
@@ -1312,11 +1316,11 @@ int sfs_create(sfs *fs, const char *path, sfs_file **fh)
 		return -ENOMEM;
 	rc = locate(fs, norm, &w);
 	if (rc == -ENOENT && strchr(norm + 1, '/') == NULL)
-		rc = -EACCES; /* a new entry at the root */
+		rc = -EROFS; /* a new entry at the root */
 	if (rc != 0)
 		goto out;
 	if (fixed(&w)) {
-		rc = -EACCES;
+		rc = -EROFS;
 		goto out;
 	}
 	if (fs->opt.readonly) {
@@ -1493,7 +1497,7 @@ int sfs_write(sfs *fs, sfs_file *f, const char *buf, size_t size, int64_t off)
 	int rc, tries;
 
 	if (f->icon)
-		return -EACCES;
+		return -EROFS;
 	if (fs->opt.readonly)
 		return -EROFS;
 	if (size == 0)
@@ -1535,6 +1539,7 @@ int sfs_fgetattr(sfs *fs, sfs_file *f, sfs_stat *st)
 
 	if (f->icon) {
 		memset(st, 0, sizeof(*st));
+		st->mtime = fs->cfg_mtime;
 		st->size = (int64_t)fs->iconlen;
 		st->mode = 0444;
 		st->readonly = 1;
@@ -1551,7 +1556,7 @@ int sfs_ftruncate(sfs *fs, sfs_file *f, int64_t size)
 	int rc;
 
 	if (f->icon)
-		return -EACCES;
+		return -EROFS;
 	if (fs->opt.readonly)
 		return -EROFS;
 	if (s->cfg.protocol == PROTO_FTP) {
@@ -1699,11 +1704,11 @@ static int prepare(sfs *fs, const char *path, where *w, char **norm, char **real
 		return -ENOMEM;
 	rc = locate(fs, *norm, w);
 	if (rc == -ENOENT && strchr(*norm + 1, '/') == NULL && !want_exists)
-		return -EACCES; /* a new entry at the root */
+		return -EROFS; /* a new entry at the root */
 	if (rc != 0)
 		return rc;
 	if (fixed(w))
-		return -EACCES;
+		return -EROFS;
 	if (fs->opt.readonly)
 		return -EROFS;
 	rc = resolve(fs, w->s, w->rest, real, rs);
@@ -1870,11 +1875,11 @@ int sfs_rename(sfs *fs, const char *from, const char *to)
 	}
 	rc = locate(fs, nt, &wt);
 	if (rc == -ENOENT && strchr(nt + 1, '/') == NULL)
-		rc = -EACCES;
+		rc = -EROFS;
 	if (rc != 0)
 		goto out;
 	if (fixed(&wt)) {
-		rc = -EACCES;
+		rc = -EROFS;
 		goto out;
 	}
 	if (wt.s != wf.s) {
@@ -1942,7 +1947,7 @@ int sfs_utimens(sfs *fs, const char *path, time_t mtime)
 	rstat rs;
 	int rc = prepare(fs, path, &w, &norm, &real, &rs, 1);
 
-	if (rc == -EACCES || rc == -EROFS) {
+	if (rc == -EROFS && !fs->opt.readonly) {
 		rc = 0; /* the root's dates: nothing to keep */
 		goto out;
 	}
@@ -1978,19 +1983,26 @@ int sfs_chmod(sfs *fs, const char *path, int mode)
 	char *norm, *real;
 	where w;
 	rstat rs;
-	int rc = prepare(fs, path, &w, &norm, &real, &rs, 1);
+	int rc = prepare(fs, path, &w, &norm, &real, &rs, 1), newmode;
 
-	if (rc == -EACCES || rc == -EROFS) {
-		rc = -EACCES;
-		goto out;
-	}
 	if (rc != 0)
 		goto out;
-	RUN(fs, w.s, rc, w.s->r->ops->chmod(w.s->r, real, mode & 0777));
+	/* Only the owner's read and write bits go to the server. The group and
+	 * other bits (which AmigaDOS programs rarely set on purpose: Copy
+	 * CLONE would make a web page private) and "x" (shown on every file,
+	 * as Amiga files have "e") stay as they are. */
+	if (rs.mode < 0) {
+		rc = 0;
+		goto out;
+	}
+	newmode = (rs.mode & 07177) | (mode & 0600);
+	if (newmode == rs.mode)
+		goto out;
+	RUN(fs, w.s, rc, w.s->r->ops->chmod(w.s->r, real, newmode));
 	if (rc == -ENOSYS)
 		rc = 0;
 	else if (rc == 0) {
-		rs.mode = mode & 0777;
+		rs.mode = newmode;
 		list_set(w.s, real, &rs);
 	}
 out:
