@@ -167,6 +167,8 @@ The DOSDriver (DEVS:DOSDrivers/SFTP) can have a Startup line, for example
  - Names that differ only in case on the server (README and readme) show as two entries, but only one of them can be opened.
  - Symbolic links are shown as what they point to.
  - All sites share one handler process: while one site is busy, the others wait.
+ - SFTP collects writes (up to 1 MB) before sending them. If the connection breaks before they are sent, the write fails and a requester names the file when it is closed: save or copy it again.
+ - Speed: SFTP encrypts everything, which takes CPU time on the Amiga; FTP is faster where the network allows. Copying many small files costs a few round trips to the server per file.
 @endnode
 
 @node Trouble "Troubleshooting"
@@ -211,6 +213,7 @@ sites.xml is plain XML (UTF-8):
 
 @{b}0.x (15.11.2026)@{ub}
  - First version: handler (filesysbox, clib4, libssh2 with AmiSSL) and sftphprefs with Test connection.
+ - SFTP much faster over the internet: reads that follow each other are fetched ahead in growing blocks, and writes are collected (up to 1 MB) and sent together, instead of waiting for the server after every block. With 20 ms to the server: about 25 MB/s up and 45 MB/s down instead of 0.2-8 MB/s.
 @endnode
 
 @node Licence "Licence"
