@@ -1,0 +1,56 @@
+name: SFTPHandler
+description: FTP and SFTP sites as folders of a volume (SFTP:)
+version: @VERSION@
+date: @DATE@
+author: Björn Hagström
+submitter: Björn Hagström
+email:
+url:
+category: driver/handler
+replaces:
+requirements: clib4.library 2.5, filesysbox.library 54.8, AmiSSL 5 (SFTP)
+license: Public domain
+minosversion: 4.1
+texttype: Plain text
+distribute: yes
+hend:
+
+sftp-handler is a filesystem handler for AmigaOS 4. The device SFTP:
+shows each FTP and SFTP site you have set up as a folder, for example
+SFTP:My server. Inside it are the files on the server: Workbench, the
+Shell and every program can open, copy, rename, delete and save them as
+on any other disk.
+
+The sites are kept with the prefs program sftphprefs (name, protocol,
+server, port, user, password, start folder, SFTP key file). Its "Test
+connection" button tries the settings before you save them. The top level
+of SFTP: only lists the sites: it does not connect and cannot be changed.
+A site connects when its folder is first opened.
+
+Features:
+
+- FTP (passive mode, works behind NAT) and SFTP (SSH 2, through libssh2
+  and AmiSSL).
+- SFTP logins with password, keyboard-interactive or an OpenSSH key file;
+  host keys are checked and kept in an OpenSSH known_hosts file.
+- Passwords can be saved with the site, or asked for with a requester.
+- Files of any size, reading from any position.
+- Names with national characters (UTF-8 on the server), upper and lower
+  case ignored as on any Amiga volume.
+- Dates (SetDate, Copy CLONE) where the server allows it.
+- Connections are made when needed, closed when idle and made again after
+  network problems.
+
+Requirements (not included, get them from OS4Depot):
+
+- clib4.library 2.5 or newer:
+  OS4Depot development/library/misc/clib4.lha
+- AmiSSL 5 or newer (for SFTP):
+  OS4Depot library/misc/amissl.lha
+- filesysbox.library 54.8 or newer (AmigaOS 4.1 Final Edition updates)
+
+Installation: double-click Install, then start SYS:Prefs/sftphprefs and
+add your sites. SFTPHandler.guide has all the details.
+
+sftp-handler is public domain. It contains libssh2 (BSD licence) and
+Expat (MIT licence); see Third-party.txt.

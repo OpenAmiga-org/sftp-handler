@@ -1,0 +1,134 @@
+; Install script for sftp-handler (AmigaOS 4 Installation Utility).
+; Public domain.
+
+(set #app "SFTP Handler")
+(set @app-name "SFTPHandler")
+(set @default-dest "L:")
+
+(set #bad 0)
+(set #missing "")
+
+(welcome
+  (cat "This installs " #app ": the device SFTP: shows your FTP and SFTP "
+       "sites as folders, and the prefs program sftphprefs keeps the list "
+       "of sites."))
+
+(if (= @user-level 0) (user 1))
+
+; --- requirements -------------------------------------------------------
+
+(procedure P_CHECK #lib #minver #minrev #what #where
+  (set #v (getversion #lib (resident)))
+  (if (= #v 0) (set #v (getversion (tackon "LIBS:" #lib))))
+  (if (< #v (+ (* #minver 65536) #minrev))
+    (
+      (set #bad 1)
+      (set #missing (cat #missing "\n\n" #what " (" #lib " " #minver "." #minrev
+                         " or newer) is missing or too old.\nGet it from: " #where))
+    )
+  )
+)
+
+(P_CHECK "filesysbox.library" 54 8 "filesysbox"
+         "AmigaOS 4.1 Final Edition updates")
+(P_CHECK "clib4.library" 2 5 "clib4"
+         "OS4Depot development/library/misc/clib4.lha\nor https://github.com/AmigaLabs/clib4/releases")
+(P_CHECK "amisslmaster.library" 5 0 "AmiSSL (needed for SFTP)"
+         "OS4Depot library/misc/amissl.lha\nor https://github.com/jens-maus/amissl/releases")
+
+(if #bad
+  (if (= 0 (askbool
+        (prompt (cat "Some required libraries are missing:" #missing
+                     "\n\nThe handler cannot work without them. You can install "
+                     "it now and add the libraries later."))
+        (help @askbool-help)
+        (choices "Install anyway" "Stop")
+        (default 0)))
+    (exit (quiet))
+  )
+)
+
+; --- programs -------------------------------------------------------------
+
+(copyfiles
+  (prompt "Copying sftp-handler to L:")
+  (help @copyfiles-help)
+  (source "L/sftp-handler")
+  (dest "L:")
+  (confirm "expert"))
+
+(copyfiles
+  (prompt "Copying the prefs program sftphprefs to SYS:Prefs")
+  (help @copyfiles-help)
+  (source "Prefs/sftphprefs")
+  (dest "SYS:Prefs")
+  (infos)
+  (confirm "expert"))
+
+; --- the DOSDriver ------------------------------------------------------
+
+(set #activate
+  (askbool
+    (prompt "Mount SFTP: every time the computer starts?\n"
+            "(It connects to a site only when its folder is opened.)")
+    (help @askbool-help)
+    (default 1)))
+
+(set #dddest (if #activate "DEVS:DOSDrivers" "SYS:Storage/DOSDrivers"))
+(if (exists (tackon #dddest "SFTP"))
+  (if (= 0 (askbool
+        (prompt (cat (tackon #dddest "SFTP") " exists already. Replace it?"))
+        (help @askbool-help)
+        (default 1)))
+    (set #dddest "")
+  )
+)
+(if (<> #dddest "")
+  (copyfiles
+    (prompt (cat "Copying the DOSDriver to " #dddest))
+    (help @copyfiles-help)
+    (source "Devs/DOSDrivers/SFTP")
+    (dest #dddest)
+    (infos)
+    (nogauge))
+)
+
+; --- documentation ------------------------------------------------------
+
+(set #docdir
+  (askdir
+    (prompt "Where should the documentation go?\n"
+            "A drawer named SFTPHandler is created there.")
+    (help @askdir-help)
+    (default "SYS:Documentation")))
+
+(set #docs (tackon #docdir "SFTPHandler"))
+(makedir #docs (prompt "Creating the documentation drawer") (help @makedir-help) (infos))
+(foreach "" "#?.(guide|txt)"
+  (copyfiles
+    (prompt "Copying the documentation")
+    (help @copyfiles-help)
+    (source @each-name)
+    (dest #docs)
+    (infos)
+    (nogauge)))
+
+; --- mount now ----------------------------------------------------------
+
+(if (<> #dddest "")
+  (if (= 0 (run "C:Assign >NIL: SFTP: EXISTS"))
+    (message "SFTP: is mounted already. The new handler is used after the computer restarts.")
+    (run (cat "C:Mount " (tackon #dddest "SFTP")))
+  )
+)
+
+(if (askbool
+      (prompt "Start sftphprefs now to add your sites?")
+      (help @askbool-help)
+      (default 1))
+  (run "Run >NIL: SYS:Prefs/sftphprefs")
+)
+
+(exit (cat #app " is installed.\n\nAdd your sites with SYS:Prefs/sftphprefs; "
+           "they appear as folders in SFTP:.\nRead " (tackon #docs "SFTPHandler.guide")
+           " for the details.") (quiet))

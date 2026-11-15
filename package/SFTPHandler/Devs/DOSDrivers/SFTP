@@ -1,0 +1,10 @@
+/* sftp-handler DOSDriver: device SFTP:, see SFTPHandler.guide.
+ * The sites are set up with SYS:Prefs/sftphprefs.
+ * Startup options (all optional): VOLUME=name CACHETIME=seconds
+ * IDLETIME=seconds TIMEOUT=seconds TEMPDIR=drawer KEEPDIR=drawer
+ * NOICONS READONLY CHARSET=name DEBUG */
+Handler   = L:sftp-handler
+StackSize = 262144
+Priority  = 5
+GlobVec   = -1
+Activate  = 1

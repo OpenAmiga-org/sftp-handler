@@ -1,0 +1,222 @@
+@database SFTPHandler.guide
+@$VER: SFTPHandler.guide 0.0 (15.11.2026)
+@author "Björn Hagström"
+@wordwrap
+
+@node Main "sftp-handler"
+
+@{b}sftp-handler@{ub} - FTP and SFTP sites as folders on AmigaOS 4
+
+   @{" Introduction       " link Intro}
+   @{" Requirements       " link Requirements}
+   @{" Installation       " link Install}
+   @{" sftphprefs         " link Prefs}
+   @{" Using SFTP:        " link Using}
+   @{" Passwords          " link Passwords}
+   @{" Host keys (SFTP)   " link HostKeys}
+   @{" DOSDriver options  " link Options}
+   @{" Limits             " link Limits}
+   @{" Troubleshooting    " link Trouble}
+   @{" Files              " link Files}
+   @{" History            " link History}
+   @{" Licence            " link Licence}
+@endnode
+
+@node Intro "Introduction"
+@{b}Introduction@{ub}
+
+sftp-handler is a filesystem handler: the device @{b}SFTP:@{ub} (volume "SFTP Sites") shows every FTP and SFTP site you have set up as a folder, for example @{b}SFTP:My server@{ub}. Inside a site's folder you see the files on the server, and Workbench, the Shell and every program can open, copy, rename, delete and save them as on any other disk.
+
+The top level of SFTP: only lists the sites; it does not connect anywhere and cannot be changed. Sites are added, changed and removed with the prefs program @{b}sftphprefs@{ub}. A connection is made when a site's folder is opened for the first time, and closed again after a while without use.
+
+Supported:
+ - FTP (passive mode, also through NAT) and SFTP (SSH 2)
+ - SFTP logins with password, keyboard-interactive or an OpenSSH key file
+ - files of any size, reading from any position
+ - folders: create, rename, delete
+ - dates (SetDate, Copy CLONE) where the server allows it
+ - national characters in names (the server side uses UTF-8)
+ - upper and lower case are ignored, as on any Amiga volume
+@endnode
+
+@node Requirements "Requirements"
+@{b}Requirements@{ub}
+
+ - AmigaOS 4.1 Final Edition
+ - @{b}filesysbox.library 54.8@{ub} or newer (part of AmigaOS 4.1 FE updates)
+ - @{b}clib4.library 2.5@{ub} or newer (not part of AmigaOS)
+   OS4Depot: development/library/misc/clib4.lha
+   https://github.com/AmigaLabs/clib4/releases
+ - @{b}AmiSSL 5@{ub} or newer, for SFTP (not part of AmigaOS)
+   OS4Depot: library/misc/amissl.lha
+   https://github.com/jens-maus/amissl/releases
+ - a TCP/IP stack (Roadshow)
+
+Without a suitable clib4.library the handler shows a requester saying so, and SFTP: cannot be used.
+@endnode
+
+@node Install "Installation"
+@{b}Installation@{ub}
+
+Double-click @{b}Install@{ub}. It copies
+
+   L:sftp-handler                  the handler
+   SYS:Prefs/sftphprefs            the prefs program
+   DEVS:DOSDrivers/SFTP            the DOSDriver (SFTP: is mounted at boot)
+                                   or SYS:Storage/DOSDrivers/SFTP
+
+and the documentation. Then start sftphprefs and add your sites.
+
+By hand: copy the same files, then @{b}Mount DEVS:DOSDrivers/SFTP@{ub}.
+@endnode
+
+@node Prefs "sftphprefs"
+@{b}sftphprefs@{ub}
+
+The list at the top shows your sites. @{b}Add@{ub} makes a new one, @{b}Duplicate@{ub} copies the selected one and @{b}Remove@{ub} deletes it. Below the list you edit the selected site:
+
+@{b}Name@{ub}       the name of the site's folder in SFTP:. It must be a valid AmigaDOS name: no ':' or '/', at most 107 characters, not ending in ".info", and no two sites may have the same name (upper/lower case does not matter).
+@{b}Protocol@{ub}   FTP or SFTP. Changing it changes the port to 21 or 22, unless you set another port.
+@{b}Server@{ub}     the server's name or IP address.
+@{b}Port@{ub}       21 for FTP and 22 for SFTP, unless the server uses another.
+@{b}User@{ub}       the user name. Empty means anonymous FTP. SFTP needs one.
+@{b}Password@{ub}   the password. Leave it empty to be asked when the site is opened (see @{"Passwords" link Passwords}).
+@{b}Folder@{ub}     the folder on the server that the site shows, for example /home/me/www. Empty means the folder you are in after logging in.
+@{b}Key file@{ub}   SFTP only: a private key file in OpenSSH format (for example made with ssh-keygen), used instead of a password. When the key has a passphrase, put it in Password (or leave Password empty to be asked).
+
+@{b}Test connection@{ub} connects with the values in the window (saved or not), logs in and lists the folder, and tells you what happened. It asks about unknown host keys just as the handler does.
+
+@{b}Forget host key@{ub} removes the saved key of the selected SFTP server (see @{"Host keys" link HostKeys}).
+
+@{b}Save@{ub} keeps the list for good (ENVARC: and ENV:), @{b}Use@{ub} until the next restart (ENV: only), @{b}Cancel@{ub} leaves everything as it was. The handler picks up the new list within a second; sites whose settings did not change keep their connection.
+
+Menus: @{b}Edit/Reset to defaults@{ub} empties the list, @{b}Last saved@{ub} loads the list from ENVARC:, @{b}Restore@{ub} goes back to the list the program started with.
+@endnode
+
+@node Using "Using SFTP:"
+@{b}Using SFTP:@{ub}
+
+Open the SFTP Sites disk icon on Workbench, or use paths like
+
+   List "SFTP:My server/www"
+   Copy RAM:picture.iff "SFTP:My server/www/"
+
+Workbench shows a drawer icon for every site (taken from ENV:Sys/def_drawer.info). Files on servers have no icons: choose @{b}Show/All files@{ub} in the window's menu to see them.
+
+The top level is read-only: creating, deleting or renaming anything there gives "file is write protected". Moving files from one site to another with Rename does not work (each site is a different server); copy them instead.
+
+A site that cannot be reached gives "no disk present" (after a requester that says why). Passwords that were cancelled are not asked for again until @{b}DiskChange SFTP:@{ub}, or until the site is changed in sftphprefs.
+@endnode
+
+@node Passwords "Passwords"
+@{b}Passwords@{ub}
+
+A password entered in sftphprefs is saved with the site, in plain text, in ENVARC:SFTPHandler/sites.xml (and ENV:). Anyone with access to your Amiga can read it there.
+
+If the password is left empty, the handler asks for it with a requester the first time the site is opened. Tick @{b}Remember the password@{ub} to have it saved with the site; otherwise it is asked again after a restart. When the server does not accept a password, the requester comes again, at most three times.
+
+Anonymous FTP: leave User empty.
+@endnode
+
+@node HostKeys "Host keys (SFTP)"
+@{b}Host keys (SFTP)@{ub}
+
+An SFTP server proves who it is with its host key. The first time you connect to a server, a requester shows the key's type and SHA256 fingerprint (the same text OpenSSH shows with ssh-keygen -lf). Compare it with what the server's administrator gives you, then choose
+
+   @{b}Accept and save@{ub}   the key is saved in ENVARC:SFTPHandler/known_hosts
+   @{b}Accept once@{ub}       this connection only
+   @{b}Cancel@{ub}            no connection
+
+If a saved key changes, a warning requester says so. That happens when a server was installed again, but it can also mean that someone is in between. Only accept the new key when you know why it changed. "Forget host key" in sftphprefs removes a saved key.
+
+known_hosts is in OpenSSH format; keys from another computer's ~/.ssh/known_hosts can be copied into it (plain host names, not hashed ones).
+@endnode
+
+@node Options "DOSDriver options"
+@{b}DOSDriver options@{ub}
+
+The DOSDriver (DEVS:DOSDrivers/SFTP) can have a Startup line, for example
+
+   Startup = "CACHETIME=10 IDLETIME=600"
+
+@{b}VOLUME=name@{ub}         volume name (default "SFTP Sites"). The device stays SFTP:, named after the DOSDriver file.
+@{b}CACHETIME=seconds@{ub}   how long a folder listing from a server is used before it is fetched again (default 5).
+@{b}IDLETIME=seconds@{ub}    a connection unused this long is closed (default 300). It is made again when needed.
+@{b}TIMEOUT=seconds@{ub}     how long to wait for a server's answer (default 60).
+@{b}TEMPDIR=drawer@{ub}      where FTP uploads are put together (default T:). See @{"Limits" link Limits}.
+@{b}KEEPDIR=drawer@{ub}      where a file is kept when its upload failed (default: TEMPDIR).
+@{b}CONFIGDIR=drawer@{ub}    read sites.xml and known_hosts from this drawer instead of ENV:/ENVARC:SFTPHandler.
+@{b}NOICONS@{ub}             no drawer icons for the sites.
+@{b}READONLY@{ub}            nothing can be changed on any site.
+@{b}CHARSET=name@{ub}        the Amiga's character set for names (default: the CHARSET variable, ISO-8859-1). ISO-8859-15 is also known.
+@{b}DEBUG@{ub}               writes what the handler does to the debug output (serial, DumpDebugBuffer).
+@endnode
+
+@node Limits "Limits"
+@{b}Limits@{ub}
+
+@{b}FTP@{ub}
+ - FTP cannot change part of a file on the server. Files written to an FTP site are put together in TEMPDIR (T:, normally in RAM:) and sent when they are closed, so T: needs room for the biggest file you save. Set TEMPDIR to a drawer on a hard disk for very big files.
+ - When an upload fails (connection lost, disk full on the server) a requester says so and the file is kept in KEEPDIR.
+ - Dates can only be set on servers that have the MFMT command.
+ - Times from servers without MLSD are shown as the server gives them.
+
+@{b}Both@{ub}
+ - Comments (FileNote) and the h, s, p and a protection bits are not kept: servers have no place for them. Setting them is accepted, so Copy CLONE works.
+ - Protection: only the owner's r and w bits are changed on the server; the group and other bits stay. Every file shows the e bit, as files on other Amiga disks do.
+ - Names that differ only in case on the server (README and readme) show as two entries, but only one of them can be opened.
+ - Symbolic links are shown as what they point to.
+ - All sites share one handler process: while one site is busy, the others wait.
+@endnode
+
+@node Trouble "Troubleshooting"
+@{b}Troubleshooting@{ub}
+
+@{b}"No disk present" in a site's folder@{ub}
+The site could not be reached or the login failed; a requester said why. Use Test connection in sftphprefs. After a cancelled password requester the site stays closed until DiskChange SFTP:.
+
+@{b}Connection refused / no answer@{ub}
+Check server name and port, and the network (Ping the server in a Shell).
+
+@{b}SFTP: "host key has changed"@{ub}
+See @{"Host keys" link HostKeys}.
+
+@{b}FTP folders stay empty or listing fails@{ub}
+The handler uses passive mode with the server's address of the control connection. A firewall that blocks the passive data ports stops listings and transfers.
+
+@{b}More detail@{ub}
+Add DEBUG to the Startup line (see @{"DOSDriver options" link Options}), mount again and read the output with DumpDebugBuffer.
+@endnode
+
+@node Files "Files"
+@{b}Files@{ub}
+
+   L:sftp-handler                      the handler
+   SYS:Prefs/sftphprefs                the prefs program
+   DEVS:DOSDrivers/SFTP                the DOSDriver
+   ENV:SFTPHandler/sites.xml           the sites in use
+   ENVARC:SFTPHandler/sites.xml        the saved sites
+   ENVARC:SFTPHandler/known_hosts      SFTP host keys
+
+sites.xml is plain XML (UTF-8):
+
+   <sftphandler version="1">
+     <site name="My server" protocol="sftp" host="example.com" port="22"
+           user="me" password="" folder="/home/me" keyfile=""/>
+   </sftphandler>
+@endnode
+
+@node History "History"
+@{b}History@{ub}
+
+@{b}0.x (15.11.2026)@{ub}
+ - First version: handler (filesysbox, clib4, libssh2 with AmiSSL) and sftphprefs with Test connection.
+@endnode
+
+@node Licence "Licence"
+@{b}Licence@{ub}
+
+sftp-handler and sftphprefs are public domain (see LICENSE.txt).
+
+They contain code of libssh2 (BSD licence), Expat (MIT licence), clib4 and the AmiSSL link library; their licences are in Third-party.txt.
+@endnode

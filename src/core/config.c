@@ -343,21 +343,45 @@ static FILE *open_new(const char *file, char *tmp, size_t tmplen)
 	return fopen(tmp, "wb");
 }
 
+/* copies src over dst (for file systems without rename, such as ENV:) */
+static int copy_over(const char *src, const char *dst)
+{
+	char buf[4096];
+	FILE *in = fopen(src, "rb"), *out;
+	size_t n;
+	int bad = 0;
+
+	if (in == NULL)
+		return -EIO;
+	out = fopen(dst, "wb");
+	if (out == NULL) {
+		fclose(in);
+		return -(errno != 0 ? errno : EIO);
+	}
+	while ((n = fread(buf, 1, sizeof(buf), in)) > 0)
+		if (fwrite(buf, 1, n, out) != n)
+			bad = 1;
+	fclose(in);
+	if (fclose(out) != 0 || bad)
+		return -EIO;
+	return 0;
+}
+
 static int replace_file(FILE *f, const char *tmp, const char *file)
 {
-	int bad = ferror(f);
+	int bad = ferror(f), rc;
 
 	if (fclose(f) != 0 || bad) {
 		remove(tmp);
 		return -EIO;
 	}
 	remove(file);
-	if (rename(tmp, file) != 0) {
-		int e = errno;
-		remove(tmp);
-		return -(e != 0 ? e : EIO);
-	}
-	return 0;
+	if (rename(tmp, file) == 0)
+		return 0;
+	/* ENV: on AmigaOS 4 cannot rename */
+	rc = copy_over(tmp, file);
+	remove(tmp);
+	return rc;
 }
 
 int sites_save(const char *file, const site_list *l)
