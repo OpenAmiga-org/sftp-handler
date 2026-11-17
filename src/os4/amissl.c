@@ -35,9 +35,15 @@ int amissl_open(void)
 	IAmiSSLMaster = (struct AmiSSLMasterIFace *)IExec->GetInterface(AmiSSLMasterBase, "main", 1, NULL);
 	if (IAmiSSLMaster == NULL)
 		return -2;
-	/* libssh2 only uses the opaque OpenSSL API, so newer AmiSSL versions
-	 * may be used automatically */
-	if (IAmiSSLMaster->OpenAmiSSLTags(AMISSL_CURRENT_VERSION,
+	/* Ask for the oldest AmiSSL 5 API (AMISSL_V3xx = AmiSSL 5.1, OpenSSL
+	 * 3.0.3), not AMISSL_CURRENT_VERSION (the SDK's, 5.27): amisslmaster
+	 * then opens the newest AmiSSL 5 that is installed, and an older one
+	 * such as 5.25 is not refused. The AmiSSL 5 interface only grows at
+	 * the end, and every function libssh2 and this handler call is in the
+	 * 5.1 interface at the same place (checked against the 5.1 SDK's
+	 * amissl.xml, see README.md). libssh2 only uses the opaque OpenSSL
+	 * API, so no structure layouts are shared. */
+	if (IAmiSSLMaster->OpenAmiSSLTags(AMISSL_V3xx,
 	                                  AmiSSL_UsesOpenSSLStructs, FALSE,
 	                                  AmiSSL_InitAmiSSL, TRUE,
 	                                  AmiSSL_GetIAmiSSL, &IAmiSSL,

@@ -64,6 +64,11 @@ The OS4 build needs the cross-compiler image
   handles read and written at any offset. Host keys in OpenSSH
   known_hosts. `libssh2_keepalive_config()` must come after the
   handshake: set before it, the key exchange fails.
+- AmiSSL (`src/os4/amissl.c`): asks amisslmaster for `AMISSL_V3xx` (the
+  AmiSSL 5.1 API), not the SDK's `AMISSL_CURRENT_VERSION` (5.27), which
+  made 0.9 refuse older AmiSSL 5 versions such as 5.25. That is safe while
+  every function called through IAmiSSL is in the 5.1 interface at the
+  same place: `tools/check_amissl_api.py` checks it (make_lha.sh runs it).
 - chmod sends only the owner's r/w bits; group/other stay as they are.
 - filesysbox maps EACCES, EIO, EXDEV... to "Error -1"; the glue maps them
   to the nearest AmigaDOS errors.
