@@ -27,6 +27,8 @@ typedef struct {
 	const char *display;      /* shown in messages, e.g. "SFTP:" */
 	int         cache_ms;     /* how long server listings are trusted */
 	int         idle_ms;      /* connections unused this long are closed */
+	int         code_idle_ms; /* the same for those whose login needed a code
+	                           * (two-factor); 0 = kept until the handler stops */
 	int         connect_timeout_ms;
 	int         io_timeout_ms;
 	int         readonly;     /* refuse all changes */

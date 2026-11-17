@@ -1,0 +1,9 @@
+# keyotp: code only (the key was the first step); keypw: password only;
+# otp: password, then code. A wrong password stops before the code question.
+auth    [success=1 default=ignore]  pam_succeed_if.so quiet user = keyotp
+auth    requisite                   pam_unix.so
+auth    [success=done default=ignore] pam_succeed_if.so quiet user = keypw
+auth    required                    pam_google_authenticator.so
+account required                    pam_permit.so
+session required                    pam_permit.so
+password required                   pam_deny.so

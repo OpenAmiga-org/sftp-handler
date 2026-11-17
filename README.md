@@ -21,7 +21,9 @@ Built on filesysbox.library, clib4, libssh2 and AmiSSL.
 - `src/linux/`  Linux FUSE build of the core, for fast tests
 - `tests/`      `unit_tests.c`, `run_tests.py` (Linux build against the
                 Docker servers), `os4/` (guest test tools)
-- `testserver/` throwaway FTP (vsftpd) and SFTP (OpenSSH) servers in Docker
+- `testserver/` throwaway FTP (vsftpd) and SFTP (OpenSSH) servers in Docker,
+                and `otp/`: OpenSSH with two-factor logins (TOTP codes from
+                `tests/totp.py`)
 - `package/`    release files: Install script, AmigaGuide, DOSDriver,
                 readme, icons (`icons/README.md`), third-party licences
 - `tools/`      build scripts, icon pictures (`make_icons.py`, `os4/mkicon.c`)
@@ -34,6 +36,12 @@ Built on filesysbox.library, clib4, libssh2 and AmiSSL.
     tools/build_os4.sh             # AmigaOS 4 handler and prefs (bumps the version)
     tests/os4/run_guest.py         # functional test in the QEMU guest (MCPd)
     tools/make_lha.sh              # release archive -> dist/SFTPHandler.lha
+
+Builds and archives made off the `main` branch are betas: `build_os4.sh`
+puts " beta" after the version string, `make_lha.sh` writes
+`dist/SFTPHandler_beta.lha` (readme marked BETA), and
+`tools/os4depot_submit.py` refuses to send anything that is not from main.
+Betas never go to OS4Depot.
 
 The OS4 build needs the cross-compiler image
 `walkero/amigagccondocker:os4-gcc15-3.6.1` (GCC 15, SDK 54.25, clib4).
@@ -64,6 +72,15 @@ The OS4 build needs the cross-compiler image
   handles read and written at any offset. Host keys in OpenSSH
   known_hosts. `libssh2_keepalive_config()` must come after the
   handshake: set before it, the key exchange fails.
+- Two-factor logins (SFTP): keyboard-interactive questions that are not the
+  password go to `remote_env.ask` (a requester). libssh2 1.11 reports the
+  first of two login steps (OpenSSH AuthenticationMethods) as a failure and
+  drops the "partial success" flag, so `login()` asks the server for its
+  methods again after each failed step and goes on with what is offered
+  then. A refused code is asked again (three times) without asking for the
+  password; Cancel works like a cancelled password requester. Connections
+  whose login needed a code are kept while idle (CODEIDLETIME, default 0 =
+  kept), as each new one needs a new code.
 - chmod sends only the owner's r/w bits; group/other stay as they are.
 - filesysbox maps EACCES, EIO, EXDEV... to "Error -1"; the glue maps them
   to the nearest AmigaDOS errors.

@@ -1,6 +1,10 @@
 #!/bin/bash
 # Puts the release together and packs it: dist/SFTPHandler.lha
 #
+# Off the main branch everything is a beta: the builds must be beta builds
+# (tools/build_os4.sh marks them), the archive is dist/SFTPHandler_beta.lha,
+# the readme says BETA, and betas never go to OS4Depot.
+#
 #   tools/make_lha.sh      (after tools/build_os4.sh)
 #
 # Layout:
@@ -21,7 +25,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LHA="${LHA:-$HOME/linux_archivers/lha/lha}"
 RELEASES="${RELEASES:-/media/sf_claude_folder/releases}"
 STAGE="$ROOT/build/stage"
-OUT="$ROOT/dist/SFTPHandler.lha"
+BRANCH=$(git -C "$ROOT" branch --show-current)
+BETA=""
+if [ "$BRANCH" != main ]; then
+	BETA=_beta
+fi
+OUT="$ROOT/dist/SFTPHandler$BETA.lha"
 LIC="$ROOT/package/licenses"
 VH="$ROOT/src/os4/version.h"
 
@@ -30,19 +39,28 @@ amigadate=$(sed -n 's/^#define SFH_DATE *"\(.*\)"/\1/p' "$VH")
 isodate=$(date +%Y%m%d)
 
 for f in sftp-handler sftphprefs; do
-	if ! strings "$ROOT/build/os4/$f" | grep -F "\$VER: $f $ver (" > /dev/null; then
+	verstr=$(strings "$ROOT/build/os4/$f" | grep -m1 -F "\$VER: $f $ver (" || true)
+	if [ -z "$verstr" ]; then
 		echo "build/os4/$f is not version $ver; run tools/build_os4.sh" >&2
+		exit 1
+	fi
+	case "$verstr" in
+	*") beta") isbeta=_beta ;;
+	*) isbeta="" ;;
+	esac
+	if [ "$isbeta" != "$BETA" ]; then
+		echo "build/os4/$f (\"$verstr\") does not fit branch $BRANCH; run tools/build_os4.sh" >&2
 		exit 1
 	fi
 done
 
 # every release says what changed: the readme and the guide need an entry
 # for this version
-if ! grep -q "^- $ver (" "$ROOT/package/SFTPHandler.readme"; then
+if ! grep -q "^- $ver[ (]" "$ROOT/package/SFTPHandler.readme"; then
 	echo "package/SFTPHandler.readme has no History entry \"- $ver (...)\"" >&2
 	exit 1
 fi
-if ! grep -q "^@{b}$ver (" "$ROOT/package/SFTPHandler/SFTPHandler.guide"; then
+if ! grep -q "^@{b}$ver[ (]" "$ROOT/package/SFTPHandler/SFTPHandler.guide"; then
 	echo "SFTPHandler.guide has no History entry for $ver" >&2
 	exit 1
 fi
@@ -59,8 +77,14 @@ cp "$ROOT/package/SFTPHandler/Devs/DOSDrivers/SFTP" "$D/Devs/DOSDrivers/"
 sed -e "s/^@\$VER: SFTPHandler.guide [0-9.]* ([0-9.]*)/@\$VER: SFTPHandler.guide $ver ($amigadate)/" \
 	"$ROOT/package/SFTPHandler/SFTPHandler.guide" | iconv -f UTF-8 -t ISO-8859-1 > "$D/SFTPHandler.guide"
 cp "$ROOT/UNLICENSE" "$D/LICENSE.txt"
-sed -e "s/@VERSION@/$ver/" -e "s/@DATE@/$isodate/" "$ROOT/package/SFTPHandler.readme" |
-	iconv -f UTF-8 -t ISO-8859-1 > "$STAGE/SFTPHandler.readme"
+if [ -n "$BETA" ]; then
+	sed -e "s/@VERSION@/$ver beta/" -e "s/@DATE@/$isodate/" \
+		-e "s/^\(description: .*\)$/\1 - BETA/" \
+		-e "0,/^hend:$/s//hend:\n\nTHIS IS A BETA (branch $BRANCH). Do not upload it to OS4Depot.\n/" \
+		"$ROOT/package/SFTPHandler.readme"
+else
+	sed -e "s/@VERSION@/$ver/" -e "s/@DATE@/$isodate/" "$ROOT/package/SFTPHandler.readme"
+fi | iconv -f UTF-8 -t ISO-8859-1 > "$STAGE/SFTPHandler.readme"
 
 {
 	echo "sftp-handler and sftphprefs are public domain (LICENSE.txt). The programs"
@@ -104,7 +128,8 @@ rm -f "$OUT"
 "$LHA" l "$OUT"
 echo "version $ver -> $OUT"
 if [ -d "$RELEASES" ]; then
-	cp -p "$OUT" "$STAGE/SFTPHandler.readme" "$RELEASES/"
+	cp -p "$OUT" "$RELEASES/"
+	cp -p "$STAGE/SFTPHandler.readme" "$RELEASES/SFTPHandler$BETA.readme"
 	echo "copied LHA and readme to $RELEASES"
 else
 	echo "note: $RELEASES not found, nothing copied" >&2

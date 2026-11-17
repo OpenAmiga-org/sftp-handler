@@ -12,6 +12,10 @@ sends to that form (its action and its f_replaces value).
                                      OS4DEPOT_EMAIL must be set (it is sent hidden)
 
 Run tools/make_lha.sh first: it writes dist/SFTPHandler.lha and build/stage/SFTPHandler.readme.
+
+Only releases from the main branch may be sent. Builds from other branches
+are betas (dist/SFTPHandler_beta.lha) and never go to OS4Depot: the script
+refuses them.
 """
 import html
 import os
@@ -25,6 +29,23 @@ README = os.path.join(ROOT, "build", "stage", "SFTPHandler.readme")
 SITE = "https://os4depot.net/"
 PUBLISHED = "driver/handler/sftphandler.lha"
 AGENT = "Mozilla/5.0 (compatible; os4depot-submit)"
+
+
+def refuse_beta():
+    """Betas (any branch but main) must never reach OS4Depot."""
+    branch = subprocess.run(["git", "-C", ROOT, "branch", "--show-current"],
+                            capture_output=True, text=True).stdout.strip()
+    if branch != "main":
+        sys.exit(f"Refused: branch {branch!r} is a beta branch; only main releases go to OS4Depot.")
+    staged = os.path.join(ROOT, "build", "stage", "SFTPHandler", "L", "sftp-handler")
+    for f in (README, staged):
+        with open(f, "rb") as fh:
+            data = fh.read()
+        if b") beta" in data or b"BETA" in data:
+            sys.exit(f"Refused: {f} is from a beta build; run tools/make_lha.sh on main.")
+
+
+refuse_beta()
 
 
 def fetch(url):

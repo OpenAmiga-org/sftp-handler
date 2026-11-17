@@ -1,0 +1,24 @@
+# sftph-otp test server: every user needs two factors.
+Port 22
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+UsePAM yes
+KbdInteractiveAuthentication yes
+PasswordAuthentication yes
+PubkeyAuthentication yes
+AuthorizedKeysFile /etc/ssh/authorized_keys
+StrictModes no
+MaxAuthTries 10
+LoginGraceTime 120
+ForceCommand internal-sftp
+Subsystem sftp internal-sftp
+
+# password and code, both asked by PAM through keyboard-interactive
+Match User otp
+    AuthenticationMethods keyboard-interactive
+# key, then the code
+Match User keyotp
+    AuthenticationMethods publickey,keyboard-interactive
+# key, then the password (two steps without a code)
+Match User keypw
+    AuthenticationMethods publickey,password

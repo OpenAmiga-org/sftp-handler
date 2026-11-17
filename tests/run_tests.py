@@ -26,7 +26,15 @@ CACHE_MS = 1000
 DATA = {
     "FTP": os.path.join(ROOT, "testserver", "ftp-data"),
     "SFTP": os.path.join(ROOT, "testserver", "sftp-data"),
+    "OTP": os.path.join(ROOT, "testserver", "otp-data"),
 }
+# the two-factor server (testserver/otp): its users and the code maker
+KEY = os.path.join(ROOT, "testserver", "keys", "client_ed25519")
+OTP_SITES = f"""  <site name="Code" protocol="sftp" host="127.0.0.1" port="2223" user="otp" password="{{otp_pw}}" folder="data"/>
+  <site name="KeyCode" protocol="sftp" host="127.0.0.1" port="2223" user="keyotp" keyfile="{KEY}" folder="data"/>
+  <site name="KeyPass" protocol="sftp" host="127.0.0.1" port="2223" user="keypw" password="keypw123" keyfile="{KEY}" folder="data"/>
+"""
+TOTP = f"{sys.executable} -I {os.path.join(ROOT, 'tests', 'totp.py')}"
 
 SITES = """<?xml version="1.0" encoding="UTF-8"?>
 <sftphandler version="1">
@@ -470,6 +478,173 @@ def t_offline():
     write_sites()
 
 
+# --- two-factor logins (testserver/otp) ------------------------------------------
+
+def log_pos():
+    p = os.path.join(WORK, "fuse.log")
+    return os.path.getsize(p) if os.path.exists(p) else 0
+
+
+def log_since(pos):
+    with open(os.path.join(WORK, "fuse.log"), "r", errors="replace") as f:
+        f.seek(pos)
+        return f.read()
+
+
+def questions(text, site):
+    return [l for l in text.splitlines() if l.startswith(f"[sftph] question requester: {site} ")]
+
+
+def otp_sites(otp_pw="otp123"):
+    write_sites(extra=OTP_SITES.format(otp_pw=otp_pw))
+
+
+def t_2fa_code():
+    # password from the site file, the code from the user
+    otp_sites()
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": TOTP}):
+        d = os.path.join(MNT, "Code")
+        assert "hello.txt" in os.listdir(d)
+        write(os.path.join(d, "via-code.txt"), b"2fa")
+        assert read(os.path.join(DATA["OTP"], "via-code.txt")) == b"2fa"
+        assert read(os.path.join(d, "hello.txt")) == b"hello\n"
+    q = questions(log_since(pos), "Code")
+    assert len(q) == 1, q
+    assert "Verification code" in q[0] and "echo=0" in q[0], q
+
+
+def t_2fa_key_then_code():
+    # the key is the first step, the code the second
+    otp_sites()
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": TOTP}):
+        assert "hello.txt" in os.listdir(os.path.join(MNT, "KeyCode"))
+    text = log_since(pos)
+    assert len(questions(text, "KeyCode")) == 1, text
+    assert "login methods keyboard-interactive" in text, text
+
+
+def t_2fa_key_then_password():
+    # two steps without a code: nothing is asked
+    otp_sites()
+    pos = log_pos()
+    with Mount():
+        assert "hello.txt" in os.listdir(os.path.join(MNT, "KeyPass"))
+    text = log_since(pos)
+    assert not questions(text, "KeyPass"), text
+    assert "login methods password" in text, text
+
+
+def t_2fa_password_asked_first():
+    # no password saved: the password requester, then the code
+    otp_sites(otp_pw="")
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": TOTP, "SFH_PASSWORD": "otp123"}):
+        assert "hello.txt" in os.listdir(os.path.join(MNT, "Code"))
+    text = log_since(pos)
+    assert "password requester: Code" in text, text
+    assert len(questions(text, "Code")) == 1, text
+
+
+def t_2fa_slow_answer():
+    # typing the code takes longer than the network timeout: still works
+    otp_sites()
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": f"sleep 4; {TOTP}"}, args=["--timeout-ms", "2000"]):
+        assert "hello.txt" in os.listdir(os.path.join(MNT, "KeyCode"))
+    assert len(questions(log_since(pos), "KeyCode")) == 1
+
+
+def t_2fa_wrong_code():
+    # asked three times, the problem shown again; then reported, no more asking
+    otp_sites()
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": "echo 000000"}):
+        expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "KeyCode"))
+        expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "KeyCode"))
+    text = log_since(pos)
+    q = questions(text, "KeyCode")
+    assert len(q) == 3, q
+    assert "did not accept the code." in q[1] and "did not accept the code." in q[2], q
+    assert "*** " in text and "use the newest one" in text, text
+
+
+def t_2fa_wrong_password():
+    # the password is refused before the code is asked: the password requester comes
+    otp_sites(otp_pw="wrong")
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": TOTP}):
+        expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "Code"))
+    text = log_since(pos)
+    assert not questions(text, "Code"), text
+    assert "password requester: Code" in text, text
+
+
+def t_2fa_cancel():
+    # Cancel: offline until the site is reset, no second question
+    otp_sites()
+    pos = log_pos()
+    with Mount():
+        expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "KeyCode"))
+        expect_errno(errno.ENODEV, os.listdir, os.path.join(MNT, "KeyCode"))
+    text = log_since(pos)
+    assert len(questions(text, "KeyCode")) == 1, text
+    assert "*** " not in text, text
+
+
+def t_2fa_kept_open():
+    # an idle two-factor connection stays (--idle-ms is for the others) ...
+    otp_sites()
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": TOTP}, args=["--idle-ms", "1000"]):
+        d = os.path.join(MNT, "KeyCode")
+        assert "hello.txt" in os.listdir(d)
+        assert "hello.txt" in os.listdir(site_dir("SFTP"))
+        time.sleep(6)
+        os.listdir(MNT)
+        time.sleep(1)
+        assert "hello.txt" in os.listdir(d)
+    text = log_since(pos)
+    assert len(questions(text, "KeyCode")) == 1, text
+    assert "Test SFTP: disconnected" in text, text
+    # ... unless --code-idle-ms says otherwise; the new question says why
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": TOTP}, args=["--code-idle-ms", "1000"]):
+        d = os.path.join(MNT, "KeyCode")
+        assert "hello.txt" in os.listdir(d)
+        time.sleep(6)
+        os.listdir(MNT)
+        time.sleep(1)
+        assert "hello.txt" in os.listdir(d)
+    q = questions(log_since(pos), "KeyCode")
+    assert len(q) == 2, q
+    assert "connection to the server was closed" in q[1], q
+
+
+def t_2fa_server_restart():
+    # the connection breaks: the next use asks for a new code
+    otp_sites()
+    pos = log_pos()
+    with Mount(env={"SFH_ANSWER_CMD": TOTP}):
+        d = os.path.join(MNT, "Code")
+        assert "hello.txt" in os.listdir(d)
+        subprocess.run(["docker", "restart", "-t", "1", "sftph-otp"], check=True,
+                       stdout=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        time.sleep(2)
+        settle()
+        write(os.path.join(d, "after-restart"), b"r")
+        assert read(os.path.join(DATA["OTP"], "after-restart")) == b"r"
+    q = questions(log_since(pos), "Code")
+    assert len(q) == 2, q
+    assert "connection to the server was closed" in q[1], q
+
+
+OTP_TESTS = [t_2fa_code, t_2fa_key_then_code, t_2fa_key_then_password,
+             t_2fa_password_asked_first, t_2fa_slow_answer, t_2fa_wrong_code, t_2fa_wrong_password,
+             t_2fa_cancel, t_2fa_kept_open, t_2fa_server_restart]
+
+
 def t_readonly():
     with Mount(args=["--readonly"]):
         expect_errno(errno.EROFS, write, os.path.join(site_dir("FTP"), "ro"), b"x")
@@ -529,7 +704,7 @@ def main():
             except Exception as e:
                 print(f"FAIL {t.__name__}: {e!r}")
                 failed += 1
-    for t in (t_password_requester, t_hostkey, t_offline, t_readonly):
+    for t in [t_password_requester, t_hostkey, t_offline, t_readonly] + OTP_TESTS:
         if only and only not in t.__name__:
             continue
         try:

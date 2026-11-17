@@ -8,6 +8,7 @@
 #
 # Every build raises SFH_REVISION in src/os4/version.h (the version of the
 # whole package, also shown by sftphprefs) and sets today's date.
+# Builds off the main branch are betas: " beta" after the version string.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -26,9 +27,15 @@ if [ ! -f "$ROOT/build/deps/libssh2-amissl/lib/libssh2.a" ]; then
 	"$ROOT/tools/build_deps_os4.sh"
 fi
 
+beta=()
+if [ "$(git -C "$ROOT" branch --show-current)" != main ]; then
+	beta=(BETA=1)
+	echo "branch $(git -C "$ROOT" branch --show-current): beta build"
+fi
+
 mkdir -p "$ROOT/build/os4"
 docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT":/src -w /src "$IMAGE" \
-	make -f tools/os4.mk "$@" < /dev/null
+	make -f tools/os4.mk "${beta[@]}" "$@" < /dev/null
 for f in sftp-handler sftphprefs; do
 	if [ -f "$ROOT/build/os4/$f" ]; then
 		strings "$ROOT/build/os4/$f" | grep -m1 "^\$VER" || true

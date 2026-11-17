@@ -275,7 +275,7 @@ static const struct fuse_operations ops = {
 static void usage(void)
 {
 	fprintf(stderr,
-	        "usage: sftph-fuse --config DIR [--icon FILE] [--cache-ms N] [--idle-ms N]\n"
+	        "usage: sftph-fuse --config DIR [--icon FILE] [--cache-ms N] [--idle-ms N] [--code-idle-ms N]\n"
 	        "         [--tempdir DIR] [--keepdir DIR] [--readonly] [--verbose|--debug]\n"
 	        "         MOUNTPOINT [fuse options]\n"
 	        "SFH_PASSWORD answers password requesters, SFH_HOSTKEY (save/once/refuse)\n"
@@ -303,6 +303,7 @@ int main(int argc, char **argv)
 		else if (strcmp(a, "--icon") == 0 && v) { fo.icon_file = v; i++; }
 		else if (strcmp(a, "--cache-ms") == 0 && v) { fo.cache_ms = atoi(v); i++; }
 		else if (strcmp(a, "--idle-ms") == 0 && v) { fo.idle_ms = atoi(v); i++; }
+		else if (strcmp(a, "--code-idle-ms") == 0 && v) { fo.code_idle_ms = atoi(v); i++; }
 		else if (strcmp(a, "--timeout-ms") == 0 && v) { fo.io_timeout_ms = atoi(v); i++; }
 		else if (strcmp(a, "--tempdir") == 0 && v) { fo.tempdir = v; i++; }
 		else if (strcmp(a, "--keepdir") == 0 && v) { fo.keepdir = v; i++; }

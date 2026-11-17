@@ -267,6 +267,40 @@ int plat_ask_password(const char *site, const char *user, const char *host,
 	return ok;
 }
 
+int plat_ask_answer(const char *site, const char *user, const char *host,
+                    const char *name, const char *instruction, const char *prompt,
+                    int echo, const char *problem, char *buf, size_t buflen)
+{
+	char text[1600], title[200];
+	char *ltext, *ltitle;
+	int ok;
+
+	/* problem, the server's title and text, its question; the question
+	 * is often "Verification code:" without saying where it comes from */
+	snprintf(title, sizeof(title), "sftp-handler: %s", site);
+	snprintf(text, sizeof(text), "%s%s%s%s%s%sLogin of \"%s\" on %s\n\n%s",
+	         problem != NULL ? problem : "", problem != NULL ? "\n\n" : "",
+	         name[0] != '\0' ? name : "", name[0] != '\0' ? "\n" : "",
+	         instruction[0] != '\0' ? instruction : "", instruction[0] != '\0' ? "\n\n" : "",
+	         user, host, prompt);
+	ltext = to_local(text);
+	ltitle = to_local(title);
+	ok = req_answer(ltitle != NULL ? ltitle : title, ltext != NULL ? ltext : text, !echo,
+	                buf, buflen);
+	free(ltext);
+	free(ltitle);
+	if (ok && plat_charset >= 0) {
+		char *u = cs_local_to_utf8(plat_charset, buf);
+
+		if (u != NULL) {
+			snprintf(buf, buflen, "%s", u);
+			memset(u, 0, strlen(u));
+			free(u);
+		}
+	}
+	return ok;
+}
+
 int plat_ask_hostkey(const char *site, const char *host, int port,
                      const char *keytype, const char *fingerprint, int mismatch)
 {

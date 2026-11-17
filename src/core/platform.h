@@ -43,6 +43,15 @@ int     plat_ask_password(const char *site, const char *user, const char *host,
                           const char *keyfile, const char *problem,
                           char *buf, size_t buflen, int *remember);
 
+/* An SFTP server asks something during the login that is not the
+ * password, usually the code of a two-factor login. name, instruction:
+ * the server's title and text (may be empty); prompt: its question; echo:
+ * the answer may be shown while typed; problem: why it is asked again (or
+ * NULL). Returns 1 for OK (answer in buf), 0 for Cancel. */
+int     plat_ask_answer(const char *site, const char *user, const char *host,
+                        const char *name, const char *instruction, const char *prompt,
+                        int echo, const char *problem, char *buf, size_t buflen);
+
 /* An SFTP server's host key is new (mismatch 0) or has changed
  * (mismatch 1). Returns 0 = refuse, 1 = accept once, 2 = accept and save. */
 int     plat_ask_hostkey(const char *site, const char *host, int port,

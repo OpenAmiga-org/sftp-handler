@@ -13,6 +13,7 @@
    @{" sftphprefs         " link Prefs}
    @{" Using SFTP:        " link Using}
    @{" Passwords          " link Passwords}
+   @{" Two-factor logins  " link TwoFactor}
    @{" Host keys (SFTP)   " link HostKeys}
    @{" DOSDriver options  " link Options}
    @{" Limits             " link Limits}
@@ -32,6 +33,7 @@ The top level of SFTP: only lists the sites; it does not connect anywhere and ca
 Supported:
  - FTP (passive mode, also through NAT) and SFTP (SSH 2)
  - SFTP logins with password, keyboard-interactive or an OpenSSH key file
+ - SFTP two-factor logins: a code from an authenticator app, or two steps (key and code)
  - files of any size, reading from any position
  - folders: create, rename, delete
  - dates (SetDate, Copy CLONE) where the server allows it
@@ -120,6 +122,25 @@ If the password is left empty, the handler asks for it with a requester the firs
 Anonymous FTP: leave User empty.
 @endnode
 
+@node TwoFactor "Two-factor logins (SFTP)"
+@{b}Two-factor logins (SFTP)@{ub}
+
+Some SFTP servers want a second proof besides the password or the key, usually a code from an authenticator app (TOTP, for example Google Authenticator). The handler asks for it with a requester that shows the server's own question, for example "Verification code:". Nothing has to be set up in sftphprefs: the server decides what it asks.
+
+What works:
+ - password and code: the password comes from the site (or the password requester), the code from you
+ - key file and code, key file and password: servers that want two steps (OpenSSH AuthenticationMethods)
+ - other questions a server asks during the login
+
+A code works only for a short time, and many servers take each code only once. When the server refuses a code, the requester comes again (at most three times): type the newest code. Cancel leaves the site closed until DiskChange SFTP:, as with the password requester. Codes are never saved.
+
+Every new connection needs a new code. So a connection that needed a code is not closed when it is unused (IDLETIME does not count for it): it stays until SFTP: is dismounted, the computer restarts or the server closes it. @{b}CODEIDLETIME@{ub} (see @{"DOSDriver options" link Options}) closes it after a while instead. When the connection was closed, the next use of the site asks for a new code and says why.
+
+"Test connection" in sftphprefs asks the same questions.
+
+Not supported: hardware security keys used as SSH keys (FIDO, "sk-" keys), and codes for FTP sites.
+@endnode
+
 @node HostKeys "Host keys (SFTP)"
 @{b}Host keys (SFTP)@{ub}
 
@@ -144,6 +165,7 @@ The DOSDriver (DEVS:DOSDrivers/SFTP) can have a Startup line, for example
 @{b}VOLUME=name@{ub}         volume name (default "SFTP Sites"). The device stays SFTP:, named after the DOSDriver file.
 @{b}CACHETIME=seconds@{ub}   how long a folder listing from a server is used before it is fetched again (default 5).
 @{b}IDLETIME=seconds@{ub}    a connection unused this long is closed (default 300). It is made again when needed.
+@{b}CODEIDLETIME=seconds@{ub} the same for a connection whose login needed a code (default 0: it is kept open). See @{"Two-factor logins" link TwoFactor}.
 @{b}TIMEOUT=seconds@{ub}     how long to wait for a server's answer (default 60).
 @{b}TEMPDIR=drawer@{ub}      where FTP uploads are put together (default T:). See @{"Limits" link Limits}.
 @{b}KEEPDIR=drawer@{ub}      where a file is kept when its upload failed (default: TEMPDIR).
@@ -185,6 +207,9 @@ Check server name and port, and the network (Ping the server in a Shell).
 @{b}SFTP: "host key has changed"@{ub}
 See @{"Host keys" link HostKeys}.
 
+@{b}SFTP: the code is not accepted@{ub}
+Use the newest code and type it quickly. Codes from an authenticator app depend on the time: the clocks of the phone and the server must be right. See @{"Two-factor logins" link TwoFactor}.
+
 @{b}FTP folders stay empty or listing fails@{ub}
 The handler uses passive mode with the server's address of the control connection. A firewall that blocks the passive data ports stops listings and transfers.
 
@@ -212,6 +237,12 @@ sites.xml is plain XML (UTF-8):
 
 @node History "History"
 @{b}History@{ub}
+
+@{b}0.10 beta (17.11.2026)@{ub}
+ - BETA from the 2fa branch: not for OS4Depot.
+ - SFTP two-factor logins: the server's questions (such as "Verification code:") are asked with a requester; logins in two steps (key and code, key and password) work. See @{"Two-factor logins" link TwoFactor}.
+ - A connection that needed a code stays open while unused; new DOSDriver option CODEIDLETIME.
+ - sftphprefs: Test connection asks the same questions.
 
 @{b}0.9 (15.11.2026)@{ub}
  - First release: handler (filesysbox, clib4, libssh2 with AmiSSL) and sftphprefs with Test connection.

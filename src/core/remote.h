@@ -29,6 +29,14 @@ typedef struct {
 	 * and save. */
 	int (*hostkey)(void *ud, const char *host, int port, const char *keytype,
 	               const char *fingerprint, int mismatch);
+	/* SFTP: the server asks something during the login that is not the
+	 * password, usually the code of a two-factor login ("Verification
+	 * code:"). name and instruction: the server's title and explanation
+	 * (may be empty); prompt: the question; echo: 1 = the answer may be
+	 * shown while it is typed. Returns 1 with the answer in buf, 0 when
+	 * the user cancelled. NULL: such questions get an empty answer. */
+	int (*ask)(void *ud, const char *name, const char *instruction, const char *prompt,
+	           int echo, char *buf, size_t buflen);
 	/* where known_hosts is kept (OpenSSH format) */
 	const char *known_hosts;
 	int connect_timeout_ms;
@@ -43,7 +51,9 @@ enum {
 	RFAIL_HOSTKEY,     /* host key refused or changed */
 	RFAIL_KEYFILE,     /* the private key file cannot be used */
 	RFAIL_PROTOCOL,    /* the server does not speak the protocol */
-	RFAIL_FOLDER       /* the start folder does not exist */
+	RFAIL_FOLDER,      /* the start folder does not exist */
+	RFAIL_CODE,        /* an answer the user typed (a two-factor code) was refused */
+	RFAIL_CANCEL       /* the user cancelled a question of the login */
 };
 
 typedef struct remote remote;

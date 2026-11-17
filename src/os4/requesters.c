@@ -100,17 +100,20 @@ int req_choice(const char *title, const char *text, const char *buttons)
 	return (int)IIntuition->EasyRequest(NULL, &es, NULL, text);
 }
 
-int req_password(const char *title, const char *text, char *buf, size_t buflen,
-                 int *remember)
+/* A window with a text, a string gadget (hidden: shows dots), with
+ * remember != NULL a "Remember" checkbox, and OK/Cancel. */
+static int ask_window(const char *title, const char *text, int hidden, const char *ok_text,
+                      char *buf, size_t buflen, int *remember)
 {
-	Object *win, *layout, *str, *chk;
+	Object *win, *layout, *str, *chk = NULL;
 	struct Window *w;
 	uint32 sigmask = 0, result;
 	uint16 code;
 	int done = 0, ok = 0;
 
 	buf[0] = '\0';
-	*remember = 0;
+	if (remember != NULL)
+		*remember = 0;
 	if (!req_open_libs() || WinCls == NULL || LayCls == NULL ||
 	    StrCls == NULL || BtnCls == NULL || ChkCls == NULL ||
 	    LblCls == NULL)
@@ -134,20 +137,21 @@ int req_password(const char *title, const char *text, char *buf, size_t buflen,
 				GA_RelVerify, TRUE,
 				GA_TabCycle, TRUE,
 				STRINGA_MaxChars, 255,
-				STRINGA_HookType, SHK_PASSWORD,
+				hidden ? STRINGA_HookType : TAG_IGNORE, SHK_PASSWORD,
 				TAG_END),
 			CHILD_MinWidth, 300,
-			LAYOUT_AddChild, chk = IIntuition->NewObject(ChkCls, NULL,
+			remember != NULL ? LAYOUT_AddChild : TAG_IGNORE,
+			remember != NULL ? (chk = IIntuition->NewObject(ChkCls, NULL,
 				GA_ID, GID_REMEMBER,
 				GA_Text, "_Remember the password (saved with the site)",
 				CHECKBOX_Checked, FALSE,
-				TAG_END),
+				TAG_END)) : NULL,
 			LAYOUT_AddChild, IIntuition->NewObject(LayCls, NULL,
 				LAYOUT_Orientation, LAYOUT_ORIENT_HORIZ,
 				LAYOUT_EvenSize, TRUE,
 				LAYOUT_AddChild, IIntuition->NewObject(BtnCls, NULL,
 					GA_ID, GID_OK,
-					GA_Text, "_Connect",
+					GA_Text, ok_text,
 					GA_RelVerify, TRUE,
 					TAG_END),
 				LAYOUT_AddChild, IIntuition->NewObject(BtnCls, NULL,
@@ -199,10 +203,23 @@ int req_password(const char *title, const char *text, char *buf, size_t buflen,
 		uint32 sel = 0;
 
 		IIntuition->GetAttr(STRINGA_TextVal, str, (uint32 *)&val);
-		IIntuition->GetAttr(GA_Selected, chk, &sel);
 		snprintf(buf, buflen, "%s", val != NULL ? (const char *)val : "");
-		*remember = sel != 0;
+		if (remember != NULL) {
+			IIntuition->GetAttr(GA_Selected, chk, &sel);
+			*remember = sel != 0;
+		}
 	}
 	IIntuition->DisposeObject(win);
 	return ok;
+}
+
+int req_password(const char *title, const char *text, char *buf, size_t buflen,
+                 int *remember)
+{
+	return ask_window(title, text, 1, "_Connect", buf, buflen, remember);
+}
+
+int req_answer(const char *title, const char *text, int hidden, char *buf, size_t buflen)
+{
+	return ask_window(title, text, hidden, "_OK", buf, buflen, NULL);
 }

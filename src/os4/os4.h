@@ -13,6 +13,8 @@ void req_message(const char *title, const char *text);
 int  req_password(const char *title, const char *text, char *buf, size_t buflen,
                   int *remember);
 /* Returns the number of the button pressed: buttons "A|B|C" give 1, 2, 0. */
+/* asks for the answer to a question (a two-factor code): 1 = OK */
+int  req_answer(const char *title, const char *text, int hidden, char *buf, size_t buflen);
 int  req_choice(const char *title, const char *text, const char *buttons);
 
 /* amissl.c: 0, -1 (no bsdsocket.library) or -2 (no usable AmiSSL) */

@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 #include <libssh2.h>
 #include <libssh2_sftp.h>
@@ -22,6 +23,12 @@ typedef struct {
 	LIBSSH2_SFTP    *sftp;
 	int              dead;
 	int              statvfs;      /* 1 works, 0 does not, -1 not tried */
+	/* the current keyboard-interactive login */
+	int              kbd_prompts;  /* questions so far */
+	int              kbd_pw_sent;  /* the password was given */
+	int              kbd_need_pw;  /* the password was asked, but there is none */
+	int              kbd_asked;    /* the user answered a question */
+	int              kbd_cancel;   /* the user cancelled a question */
 } sftp_remote;
 
 /* Reads and writes are each a round trip to the server. Amiga programs
@@ -31,6 +38,11 @@ typedef struct {
 #define RA_MIN   (32 * 1024)     /* first read-ahead block */
 #define RA_MAX   (512 * 1024)    /* largest; libssh2 asks for 4x ahead */
 #define WB_SIZE  (1024 * 1024)   /* write-behind buffer */
+
+/* libssh2 counts its timeout from the start of a call, so a login's
+ * questions get this much more for the user to answer (servers give up
+ * sooner: OpenSSH after 2 minutes) */
+#define ASK_TIME_MS (10 * 60 * 1000)
 
 struct rhandle {
 	LIBSSH2_SFTP_HANDLE *h;
@@ -799,28 +811,97 @@ static int check_hostkey(sftp_remote *sr, char *err, size_t errlen)
 	return 0;
 }
 
+/* text from the server (not terminated) as a C string */
+static void copy_text(char *dst, size_t dstlen, const char *src, int len)
+{
+	size_t n = len > 0 ? (size_t)len : 0;
+
+	if (n >= dstlen)
+		n = dstlen - 1;
+	if (src != NULL && n > 0)
+		memcpy(dst, src, n);
+	else
+		n = 0;
+	dst[n] = '\0';
+}
+
+static int has_word(const char *text, const char *word)
+{
+	size_t n = strlen(word);
+
+	for (; *text != '\0'; text++) {
+		if (strncasecmp(text, word, n) == 0)
+			return 1;
+	}
+	return 0;
+}
+
+/* A question of a two-factor login, not the password: "Verification
+ * code:", "Passcode or option (1-3):", "OTP:", "Token:" ... */
+static int looks_like_code(const char *q)
+{
+	static const char *const words[] = {
+		"code", "token", "otp", "one-time", "one time", "verif", "factor",
+		"option", "yubi", "pin:", "pin ", NULL
+	};
+	int i;
+
+	for (i = 0; words[i] != NULL; i++) {
+		if (has_word(q, words[i]))
+			return 1;
+	}
+	return 0;
+}
+
+/* The server's questions (PAM). The password goes to the question that
+ * asks for it: one that says "password" (or the first question, when it
+ * is hidden and does not look like a code: "Kennwort:"). Every other
+ * question goes to the user. */
 static void kbd_callback(const char *name, int name_len, const char *instruction,
                          int instruction_len, int num_prompts,
                          const LIBSSH2_USERAUTH_KBDINT_PROMPT *prompts,
                          LIBSSH2_USERAUTH_KBDINT_RESPONSE *responses, void **abstract)
 {
 	sftp_remote *sr = *abstract;
+	char nm[200], ins[600], q[300], typed[256];
 	int i;
 
-	(void)name;
-	(void)name_len;
-	(void)instruction;
-	(void)instruction_len;
-	(void)prompts;
-	/* every prompt gets the password (usually there is one: "Password:") */
+	copy_text(nm, sizeof(nm), name, name_len);
+	copy_text(ins, sizeof(ins), instruction, instruction_len);
 	for (i = 0; i < num_prompts; i++) {
-		size_t n = strlen(sr->password);
+		const char *answer = "";
+		int is_pw;
+		size_t n;
 
+		copy_text(q, sizeof(q), (const char *)prompts[i].text, (int)prompts[i].length);
+		is_pw = !prompts[i].echo && !looks_like_code(q) &&
+		        (has_word(q, "pass") || sr->kbd_prompts == 0);
+		sr->kbd_prompts++;
+		typed[0] = '\0';
+		if (sr->kbd_cancel) {
+			/* cancelled: empty answers, the login fails */
+		} else if (is_pw && !sr->kbd_pw_sent && sr->password[0] != '\0') {
+			answer = sr->password;
+			sr->kbd_pw_sent = 1;
+		} else if (is_pw && sr->password[0] == '\0') {
+			/* asked the usual way (password requester, "Remember") */
+			sr->kbd_need_pw = 1;
+		} else if (sr->env.ask != NULL) {
+			plat_log(LOG_INFO, "sftp %s: the server asks \"%s\"\n", sr->site.name, q);
+			if (sr->env.ask(sr->env.ud, nm, ins, q, prompts[i].echo, typed, sizeof(typed))) {
+				answer = typed;
+				sr->kbd_asked = 1;
+			} else {
+				sr->kbd_cancel = 1;
+			}
+		}
+		n = strlen(answer);
 		responses[i].text = malloc(n + 1);
 		if (responses[i].text != NULL) {
-			memcpy(responses[i].text, sr->password, n + 1);
+			memcpy(responses[i].text, answer, n + 1);
 			responses[i].length = (unsigned int)n;
 		}
+		memset(typed, 0, sizeof(typed));
 	}
 }
 
@@ -839,12 +920,13 @@ static int has_method(const char *list, const char *m)
 	return 0;
 }
 
-static int login(sftp_remote *sr, char *err, size_t errlen, int *fail)
+/* The server's login methods (for the next step) into buf. Returns 1,
+ * 0 when the login is already complete, or -errno. */
+static int list_methods(sftp_remote *sr, char *buf, size_t buflen, char *err, size_t errlen)
 {
 	const site_cfg *s = &sr->site;
 	const char *methods;
 	char *msg;
-	int rc;
 
 	methods = libssh2_userauth_list(sr->ss, s->user, (unsigned)strlen(s->user));
 	if (methods == NULL) {
@@ -854,57 +936,117 @@ static int login(sftp_remote *sr, char *err, size_t errlen, int *fail)
 		snprintf(err, errlen, "The login failed: %s", msg != NULL ? msg : "");
 		return -EIO;
 	}
-	plat_log(LOG_INFO, "sftp %s: login methods %s\n", s->name, methods);
-	if (s->keyfile[0] != '\0' && has_method(methods, "publickey")) {
-		rc = libssh2_userauth_publickey_fromfile_ex(sr->ss, s->user, (unsigned)strlen(s->user),
-		                                            NULL, s->keyfile, sr->password);
-		if (rc == 0)
-			return 0;
-		libssh2_session_last_error(sr->ss, &msg, NULL, 0);
-		plat_log(LOG_INFO, "sftp %s: key login failed: %d %s\n", s->name, rc, msg);
-		if (rc == LIBSSH2_ERROR_FILE || rc == LIBSSH2_ERROR_METHOD_NOT_SUPPORTED) {
-			*fail = sr->password[0] == '\0' ? RFAIL_LOGIN : RFAIL_KEYFILE;
-			snprintf(err, errlen, "The key file %s cannot be used%s (%s).", s->keyfile,
-			         sr->password[0] == '\0' ? " without its passphrase" : "",
-			         msg != NULL ? msg : "");
-			return -EACCES;
-		}
-		/* key refused: try a password below */
-	}
-	if (sr->password[0] == '\0') {
-		*fail = RFAIL_LOGIN;
-		snprintf(err, errlen, "A password is needed.");
-		return -EACCES;
-	}
-	if (has_method(methods, "password")) {
-		rc = libssh2_userauth_password(sr->ss, s->user, sr->password);
-		if (rc == 0)
-			return 0;
-		if (rc != LIBSSH2_ERROR_AUTHENTICATION_FAILED && rc != LIBSSH2_ERROR_PASSWORD_EXPIRED) {
+	snprintf(buf, buflen, "%s", methods);
+	plat_log(LOG_INFO, "sftp %s: login methods %s\n", s->name, buf);
+	return 1;
+}
+
+/* Logs in with the key file, the password and the server's questions.
+ * A server can ask for two of them in turn (OpenSSH AuthenticationMethods
+ * "publickey,keyboard-interactive"): libssh2 reports the first step as a
+ * failure, but the methods the server offers next then change. */
+static int login(sftp_remote *sr, char *err, size_t errlen, int *fail)
+{
+	const site_cfg *s = &sr->site;
+	char methods[256];
+	char *msg;
+	int rc, step, tried_key = 0, tried_pw = 0, tried_kbd = 0, pw_rc = 0;
+
+	rc = list_methods(sr, methods, sizeof(methods), err, errlen);
+	if (rc <= 0)
+		return rc;
+	for (step = 0; step < 6; step++) {
+		if (s->keyfile[0] != '\0' && has_method(methods, "publickey") && !tried_key) {
+			tried_key = 1;
+			rc = libssh2_userauth_publickey_fromfile_ex(sr->ss, s->user,
+			                                            (unsigned)strlen(s->user),
+			                                            NULL, s->keyfile, sr->password);
+			if (rc == 0)
+				return 0;
 			libssh2_session_last_error(sr->ss, &msg, NULL, 0);
-			snprintf(err, errlen, "The login failed: %s", msg != NULL ? msg : "");
-			return -EIO;
+			plat_log(LOG_INFO, "sftp %s: key login: %d %s\n", s->name, rc, msg);
+			if (rc == LIBSSH2_ERROR_FILE || rc == LIBSSH2_ERROR_METHOD_NOT_SUPPORTED) {
+				*fail = sr->password[0] == '\0' ? RFAIL_LOGIN : RFAIL_KEYFILE;
+				snprintf(err, errlen, "The key file %s cannot be used%s (%s).", s->keyfile,
+				         sr->password[0] == '\0' ? " without its passphrase" : "",
+				         msg != NULL ? msg : "");
+				return -EACCES;
+			}
+			if (rc != LIBSSH2_ERROR_AUTHENTICATION_FAILED &&
+			    rc != LIBSSH2_ERROR_PUBLICKEY_UNVERIFIED)
+				goto failed;
+			/* refused, or the first of two steps: see what is offered now */
+		} else if (has_method(methods, "password") && !tried_pw && sr->password[0] != '\0') {
+			tried_pw = 1;
+			pw_rc = rc = libssh2_userauth_password(sr->ss, s->user, sr->password);
+			if (rc == 0)
+				return 0;
+			if (rc != LIBSSH2_ERROR_AUTHENTICATION_FAILED && rc != LIBSSH2_ERROR_PASSWORD_EXPIRED)
+				goto failed;
+		} else if (has_method(methods, "keyboard-interactive") && !tried_kbd) {
+			tried_kbd = 1;
+			sr->kbd_prompts = 0;
+			sr->kbd_pw_sent = sr->kbd_need_pw = sr->kbd_asked = sr->kbd_cancel = 0;
+			libssh2_session_set_timeout(sr->ss, sr->env.io_timeout_ms + ASK_TIME_MS);
+			rc = libssh2_userauth_keyboard_interactive(sr->ss, s->user, kbd_callback);
+			libssh2_session_set_timeout(sr->ss, sr->env.io_timeout_ms);
+			if (rc == 0)
+				return 0;
+			if (sr->kbd_cancel) {
+				*fail = RFAIL_CANCEL;
+				snprintf(err, errlen, "The login was cancelled.");
+				return -EACCES;
+			}
+			if (rc != LIBSSH2_ERROR_AUTHENTICATION_FAILED && sr->kbd_asked) {
+				/* the server closed the login while the user typed */
+				*fail = RFAIL_CODE;
+				snprintf(err, errlen, "The server did not wait for the answer "
+				         "(servers give only a short time for a login).");
+				return -EACCES;
+			}
+			if (rc != LIBSSH2_ERROR_AUTHENTICATION_FAILED)
+				goto failed;
+			if (sr->kbd_asked) {
+				*fail = RFAIL_CODE;
+				snprintf(err, errlen, sr->kbd_pw_sent ?
+				         "The server did not accept the code (or the password)." :
+				         "The server did not accept the code.");
+				return -EACCES;
+			}
+			if (sr->kbd_need_pw) {
+				*fail = RFAIL_LOGIN;
+				snprintf(err, errlen, "A password is needed.");
+				return -EACCES;
+			}
+		} else {
+			break;
 		}
-		if (!has_method(methods, "keyboard-interactive")) {
-			*fail = RFAIL_LOGIN;
-			snprintf(err, errlen, rc == LIBSSH2_ERROR_PASSWORD_EXPIRED ?
-			         "The password has expired." :
-			         "The server did not accept the user name or password.");
-			return -EACCES;
-		}
-	}
-	if (has_method(methods, "keyboard-interactive")) {
-		rc = libssh2_userauth_keyboard_interactive(sr->ss, s->user, kbd_callback);
-		if (rc == 0)
-			return 0;
-		*fail = RFAIL_LOGIN;
-		snprintf(err, errlen, "The server did not accept the user name or password.");
-		return -EACCES;
+		rc = list_methods(sr, methods, sizeof(methods), err, errlen);
+		if (rc <= 0)
+			return rc;
 	}
 	*fail = RFAIL_LOGIN;
-	snprintf(err, errlen, "The server allows none of the login methods this handler has (%s).",
-	         methods);
+	if (sr->password[0] == '\0' &&
+	    (has_method(methods, "password") || has_method(methods, "keyboard-interactive"))) {
+		snprintf(err, errlen, "A password is needed.");
+	} else if (tried_pw || tried_kbd) {
+		snprintf(err, errlen, tried_pw && pw_rc == LIBSSH2_ERROR_PASSWORD_EXPIRED ?
+		         "The password has expired." :
+		         "The server did not accept the user name or password.");
+	} else if (tried_key && has_method(methods, "publickey") &&
+	           !has_method(methods, "password") && !has_method(methods, "keyboard-interactive")) {
+		*fail = RFAIL_KEYFILE;
+		snprintf(err, errlen, "The server did not accept the key file %s.", s->keyfile);
+	} else {
+		snprintf(err, errlen,
+		         "The server allows none of the login methods this handler has (%s).", methods);
+	}
 	return -EACCES;
+
+failed:
+	libssh2_session_last_error(sr->ss, &msg, NULL, 0);
+	snprintf(err, errlen, "The login failed: %s", msg != NULL ? msg : "");
+	return -EIO;
 }
 
 int sftp_connect(const site_cfg *site, const char *password, const remote_env *env,

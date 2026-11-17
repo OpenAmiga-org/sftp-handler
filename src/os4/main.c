@@ -166,11 +166,11 @@ int32 sfh_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 
 static const char template[] =
 	"VOLUME/K,CONFIGDIR/K,CACHETIME/K/N,IDLETIME/K/N,TIMEOUT/K/N,"
-	"TEMPDIR/K,KEEPDIR/K,NOICONS/S,READONLY/S,CHARSET/K,DEBUG/S";
+	"TEMPDIR/K,KEEPDIR/K,NOICONS/S,READONLY/S,CHARSET/K,DEBUG/S,CODEIDLETIME/K/N";
 
 enum {
 	A_VOLUME, A_CONFIGDIR, A_CACHETIME, A_IDLETIME, A_TIMEOUT,
-	A_TEMPDIR, A_KEEPDIR, A_NOICONS, A_READONLY, A_CHARSET, A_DEBUG, A_COUNT
+	A_TEMPDIR, A_KEEPDIR, A_NOICONS, A_READONLY, A_CHARSET, A_DEBUG, A_CODEIDLETIME, A_COUNT
 };
 
 static struct {
@@ -545,6 +545,8 @@ static int handler_main(struct DosPacket *pkt)
 	g.fo.keepdir = g.keepdir;
 	g.fo.cache_ms = args[A_CACHETIME] ? *(int32 *)args[A_CACHETIME] * 1000 : 5000;
 	g.fo.idle_ms = args[A_IDLETIME] ? *(int32 *)args[A_IDLETIME] * 1000 : 300000;
+	/* two-factor logins: each new connection needs a new code */
+	g.fo.code_idle_ms = args[A_CODEIDLETIME] ? *(int32 *)args[A_CODEIDLETIME] * 1000 : 0;
 	g.fo.io_timeout_ms = args[A_TIMEOUT] ? *(int32 *)args[A_TIMEOUT] * 1000 : 60000;
 	g.fo.connect_timeout_ms = 20000;
 	g.fo.readonly = g.readonly;

@@ -135,6 +135,39 @@ int plat_ask_password(const char *site, const char *user, const char *host,
 	return 1;
 }
 
+/* SFH_ANSWER_CMD: a command that prints the answer (the tests use
+ * tests/totp.py); it gets the question in SFH_PROMPT. Unset or failing:
+ * Cancel. */
+int plat_ask_answer(const char *site, const char *user, const char *host,
+                    const char *name, const char *instruction, const char *prompt,
+                    int echo, const char *problem, char *buf, size_t buflen)
+{
+	const char *cmd = getenv("SFH_ANSWER_CMD");
+	FILE *p;
+	size_t n;
+	int ok = 0;
+
+	fprintf(stderr, "[sftph] question requester: %s (%s@%s) [%s] [%s] \"%s\" echo=%d%s%s\n",
+	        site, user, host, name, instruction, prompt, echo,
+	        problem != NULL ? " - " : "", problem != NULL ? problem : "");
+	buf[0] = '\0';
+	if (cmd == NULL)
+		return 0;
+	setenv("SFH_PROMPT", prompt, 1);
+	p = popen(cmd, "r");
+	if (p == NULL)
+		return 0;
+	if (fgets(buf, (int)buflen, p) != NULL) {
+		n = strlen(buf);
+		while (n > 0 && (buf[n - 1] == '\n' || buf[n - 1] == '\r'))
+			buf[--n] = '\0';
+	}
+	ok = pclose(p) == 0;
+	if (!ok)
+		buf[0] = '\0';
+	return ok;
+}
+
 int plat_ask_hostkey(const char *site, const char *host, int port,
                      const char *keytype, const char *fingerprint, int mismatch)
 {

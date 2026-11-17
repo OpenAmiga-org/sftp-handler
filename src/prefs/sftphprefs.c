@@ -36,7 +36,7 @@
 #include "version.h"
 
 static const char __attribute__((used)) verstag[] =
-	"\0$VER: sftphprefs " SFH_STR(SFH_VERSION) "." SFH_STR(SFH_REVISION) " (" SFH_DATE ")";
+	"\0$VER: sftphprefs " SFH_VERNUM " (" SFH_DATE ")" SFH_BETA_STR;
 
 #define PROGNAME "sftphprefs"
 #define ENV_DIR    "ENV:" CFG_DIR
@@ -562,6 +562,19 @@ static int prefs_hostkey(void *ud, const char *host, int port, const char *keyty
 	return answer;
 }
 
+/* a question of the login (a two-factor code), as the handler asks it */
+static int prefs_ask(void *ud, const char *name, const char *instruction, const char *prompt,
+                     int echo, char *buf, size_t buflen)
+{
+	const site_cfg *s = ud;
+	int64_t t = plat_ms();
+	int ok = plat_ask_answer(s->name, s->user, s->host, name, instruction, prompt, echo, NULL,
+	                         buf, buflen);
+
+	question_ms += plat_ms() - t;
+	return ok;
+}
+
 static void test_connection(void)
 {
 	site_cfg s;
@@ -609,6 +622,7 @@ static void test_connection(void)
 	env.io_timeout_ms = 20000;
 	/* the same questions as the handler asks */
 	env.hostkey = prefs_hostkey;
+	env.ask = prefs_ask;
 	env.ud = &s;
 	busy(1);
 	question_ms = 0;

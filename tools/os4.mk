@@ -15,6 +15,10 @@ CFLAGS   = -O2 -g $(WARN) -std=gnu11 -mcrt=clib4 \
 LDFLAGS  = -mcrt=clib4 -athread=native -L$(SSH2DIR)/lib -L$(AMISSL)/lib/AmigaOS4 \
            -Lbuild/deps/amissl-clib4 -L$(SDK)/local/clib4/lib
 LIBS     = -lssh2 -lamisslstubs -lamisslauto -lexpat
+# BETA=1 (tools/build_os4.sh, off the main branch): marked as a beta
+ifdef BETA
+CFLAGS  += -DSFH_BETA
+endif
 STRIPFLAGS = -R.comment --strip-unneeded-rel-relocs
 
 CORE_SRC = src/core/util.c src/core/charset.c src/core/config.c src/core/net.c \

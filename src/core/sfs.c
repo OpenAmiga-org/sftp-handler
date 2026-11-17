@@ -55,6 +55,8 @@ typedef struct site {
 	int          reported;   /* a connection problem was shown */
 	char         password[256];   /* typed into the requester */
 	int          have_password;
+	int          code_login; /* the login asked a question (a two-factor code) */
+	char         ask_problem[300]; /* shown with the next question */
 	listing     *lists[NBUCKETS];
 	size_t       nlists;
 	int          nfiles;     /* open files */
@@ -526,6 +528,20 @@ static int hostkey_cb(void *ud, const char *host, int port, const char *keytype,
 	return plat_ask_hostkey(s->cfg.name, host, port, keytype, fingerprint, mismatch);
 }
 
+/* a question of the login that is not the password: a two-factor code */
+static int ask_cb(void *ud, const char *name, const char *instruction, const char *prompt,
+                  int echo, char *buf, size_t buflen)
+{
+	site *s = ud;
+	int ok;
+
+	ok = plat_ask_answer(s->cfg.name, s->cfg.user, s->cfg.host, name, instruction, prompt, echo,
+	                     s->ask_problem[0] != '\0' ? s->ask_problem : NULL, buf, buflen);
+	s->ask_problem[0] = '\0';
+	s->code_login = 1;
+	return ok;
+}
+
 static const char *fail_hint(int fail)
 {
 	switch (fail) {
@@ -543,6 +559,9 @@ static const char *fail_hint(int fail)
 		return "Check the protocol and port in sftphprefs.";
 	case RFAIL_FOLDER:
 		return "Check the folder in sftphprefs.";
+	case RFAIL_CODE:
+		return "A code works only for a short time (and often only once):\n"
+		       "use the newest one.";
 	}
 	return "";
 }
@@ -553,7 +572,7 @@ static int need_remote(sfs *fs, site *s)
 	remote_env env;
 	char err[600], msg[1200];
 	const char *problem = NULL;
-	int tries, rc = ERR_OFFLINE, fail = RFAIL_NETWORK, remember = 0, asked = 0;
+	int tries, rc = ERR_OFFLINE, fail = RFAIL_NETWORK, remember = 0, asked = 0, codes = 0;
 	int ask_first;
 
 	s->last_use = plat_ms();
@@ -587,6 +606,7 @@ static int need_remote(sfs *fs, site *s)
 	memset(&env, 0, sizeof(env));
 	env.ud = s;
 	env.hostkey = hostkey_cb;
+	env.ask = ask_cb;
 	env.known_hosts = fs->opt.known_hosts;
 	env.connect_timeout_ms = fs->opt.connect_timeout_ms;
 	env.io_timeout_ms = fs->opt.io_timeout_ms;
@@ -594,6 +614,10 @@ static int need_remote(sfs *fs, site *s)
 	 * anonymously (FTP) or with a key file (SFTP) */
 	ask_first = s->cfg.user[0] != '\0' && s->cfg.password[0] == '\0' &&
 	            !(s->cfg.protocol == PROTO_SFTP && s->cfg.keyfile[0] != '\0');
+	/* the last connection needed a code: say why a new one is asked */
+	if (s->code_login)
+		snprintf(s->ask_problem, sizeof(s->ask_problem),
+		         "The connection to the server was closed.\nA new code is needed.");
 	for (tries = 0; tries < 4; tries++) {
 		const char *pass;
 
@@ -615,6 +639,7 @@ static int need_remote(sfs *fs, site *s)
 		pass = s->have_password ? s->password : s->cfg.password;
 		plat_log(LOG_INFO, "%s: connecting to %s:%d (%s)\n", s->cfg.name, s->cfg.host,
 		         site_port(&s->cfg), proto_name(s->cfg.protocol));
+		s->code_login = 0;
 		if (s->cfg.protocol == PROTO_SFTP)
 			rc = sftp_connect(&s->cfg, pass, &env, &s->r, err, sizeof(err), &fail);
 		else
@@ -624,12 +649,24 @@ static int need_remote(sfs *fs, site *s)
 				save_password(fs, s);
 			s->reported = 0;
 			s->last_fail = 0;
+			s->ask_problem[0] = '\0';
 			s->last_use = s->last_keepalive = plat_ms();
 			list_flush(s);
 			plat_log(LOG_INFO, "%s: connected\n", s->cfg.name);
 			return 0;
 		}
 		plat_log(LOG_ERR, "%s: %s\n", s->cfg.name, err);
+		if (fail == RFAIL_CANCEL) {
+			/* as when the password requester is cancelled */
+			s->refused = 1;
+			s->ask_problem[0] = '\0';
+			return ERR_OFFLINE;
+		}
+		if (fail == RFAIL_CODE && ++codes < 3) {
+			/* a wrong or old code: ask again, the password stays */
+			snprintf(s->ask_problem, sizeof(s->ask_problem), "%s", err);
+			continue;
+		}
 		if (fail == RFAIL_LOGIN && s->cfg.user[0] != '\0') {
 			/* wrong or missing password: ask (again) */
 			s->have_password = 0;
@@ -639,6 +676,7 @@ static int need_remote(sfs *fs, site *s)
 		}
 		break;
 	}
+	s->ask_problem[0] = '\0';
 	s->refused_kh = 0;
 	if (fail == RFAIL_HOSTKEY) {
 		struct stat st;
@@ -1081,7 +1119,7 @@ int sfs_connected(sfs *fs)
 
 void sfs_idle(sfs *fs)
 {
-	int64_t now = plat_ms();
+	int64_t now = plat_ms(), idle;
 	int i;
 
 	for (i = 0; i < fs->nsites; i++) {
@@ -1091,7 +1129,9 @@ void sfs_idle(sfs *fs)
 			list_trim(s, LIST_KEEP_MS);
 		if (s->r == NULL)
 			continue;
-		if (s->nfiles == 0 && now - s->last_use > fs->opt.idle_ms) {
+		/* a new connection would need a new code: keep two-factor ones */
+		idle = s->code_login ? fs->opt.code_idle_ms : fs->opt.idle_ms;
+		if (s->nfiles == 0 && idle > 0 && now - s->last_use > idle) {
 			drop_remote(fs, s);
 			continue;
 		}
