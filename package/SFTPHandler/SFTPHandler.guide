@@ -242,6 +242,7 @@ sites.xml is plain XML (UTF-8):
 @{b}History@{ub}
 
 @{b}0.10 (17.11.2026)@{ub}
+ - Works with every AmiSSL 5 (5.1 or newer): 0.9 needed AmiSSL 5.27 and said "needs AmiSSL 5 or newer" with an older one such as 5.25.
  - New icons in the AmigaOS 4.1 style.
  - SFTP: has a volume icon of its own: Install copies def_SFTP.info to ENVARC:Sys and ENV:Sys, where Workbench looks for it.
 

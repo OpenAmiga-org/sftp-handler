@@ -54,6 +54,10 @@ for f in sftp-handler sftphprefs; do
 	fi
 done
 
+# every AmiSSL 5 must work: src/os4/amissl.c asks for the AmiSSL 5.1 API,
+# so the builds may only call functions AmiSSL 5.1 has
+python3 -I "$ROOT/tools/check_amissl_api.py"
+
 # every release says what changed: the readme and the guide need an entry
 # for this version
 if ! grep -q "^- $ver[ (]" "$ROOT/package/SFTPHandler.readme"; then
