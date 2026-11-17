@@ -51,6 +51,10 @@ Requirements (not included, get them from OS4Depot):
   OS4Depot library/misc/amissl.lha
 - filesysbox.library 54.8 or newer (AmigaOS 4.1 Final Edition updates)
 
+Supported AmiSSL versions: every AmiSSL 5 from 5.1 on, and AmiSSL 6
+(6.1 or newer). When both are installed, AmiSSL 6 is used. AmiSSL 4 and
+older are not supported. FTP sites do not need AmiSSL.
+
 Installation: double-click Install, then start SYS:Prefs/sftphprefs and
 add your sites. SFTPHandler.guide has all the details.
 
