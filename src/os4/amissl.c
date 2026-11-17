@@ -21,8 +21,33 @@ static struct Library     *SockBase;
 static struct Interface   *ISock;
 static int                 initialised;
 
+/* tools/gen_amissl_glue.py: the stubs call amissl_fn[], filled here with
+ * the functions of the opened interface. AmiSSL 5 (OpenSSL 3) and AmiSSL 6
+ * (OpenSSL 4) have the same functions with the same prototypes (checked by
+ * tools/check_amissl_api.py) but at other places in their interfaces. */
+extern void *amissl_fn[];
+extern const int amissl_nfn;
+extern const unsigned int amissl_off_v3[], amissl_off_v4[];
+extern const int amissl_v4xx;
+
+static int amissl_api; /* 5 or 6 */
+
+static int open_api(int api)
+{
+	return IAmiSSLMaster->OpenAmiSSLTags(api,
+	                                     AmiSSL_UsesOpenSSLStructs, FALSE,
+	                                     AmiSSL_InitAmiSSL, TRUE,
+	                                     AmiSSL_GetIAmiSSL, &IAmiSSL,
+	                                     AmiSSL_ISocket, ISock,
+	                                     AmiSSL_ErrNoPtr, &errno,
+	                                     TAG_DONE);
+}
+
 int amissl_open(void)
 {
+	const unsigned int *off;
+	int i;
+
 	SockBase = IExec->OpenLibrary("bsdsocket.library", 4);
 	if (SockBase == NULL)
 		return -1;
@@ -35,24 +60,32 @@ int amissl_open(void)
 	IAmiSSLMaster = (struct AmiSSLMasterIFace *)IExec->GetInterface(AmiSSLMasterBase, "main", 1, NULL);
 	if (IAmiSSLMaster == NULL)
 		return -2;
-	/* Ask for the oldest AmiSSL 5 API (AMISSL_V3xx = AmiSSL 5.1, OpenSSL
-	 * 3.0.3), not AMISSL_CURRENT_VERSION (the SDK's, 5.27): amisslmaster
-	 * then opens the newest AmiSSL 5 that is installed, and an older one
-	 * such as 5.25 is not refused. The AmiSSL 5 interface only grows at
-	 * the end, and every function libssh2 and this handler call is in the
-	 * 5.1 interface at the same place (checked against the 5.1 SDK's
-	 * amissl.xml, see README.md). libssh2 only uses the opaque OpenSSL
-	 * API, so no structure layouts are shared. */
-	if (IAmiSSLMaster->OpenAmiSSLTags(AMISSL_V3xx,
-	                                  AmiSSL_UsesOpenSSLStructs, FALSE,
-	                                  AmiSSL_InitAmiSSL, TRUE,
-	                                  AmiSSL_GetIAmiSSL, &IAmiSSL,
-	                                  AmiSSL_ISocket, ISock,
-	                                  AmiSSL_ErrNoPtr, &errno,
-	                                  TAG_DONE) != 0)
+	/* AmiSSL 6 when it is there (amisslmaster 6 comes with it), else the
+	 * oldest AmiSSL 5 API (AMISSL_V3xx = AmiSSL 5.1, OpenSSL 3.0.3), not the
+	 * SDK's AMISSL_CURRENT_VERSION (5.27): amisslmaster then opens the
+	 * newest AmiSSL 5 installed, and an older one such as 5.25 is not
+	 * refused. Each AmiSSL interface only grows at the end; every function
+	 * used is in AmiSSL 5.1 at the same place (tools/check_amissl_api.py).
+	 * libssh2 only uses the opaque OpenSSL API, so no structure layouts
+	 * are shared. */
+	amissl_api = 0;
+	if (AmiSSLMasterBase->lib_Version >= 6 && open_api(amissl_v4xx) == 0)
+		amissl_api = 6;
+	else if (open_api(AMISSL_V3xx) == 0)
+		amissl_api = 5;
+	else
 		return -2;
 	initialised = 1;
+	off = amissl_api == 6 ? amissl_off_v4 : amissl_off_v3;
+	for (i = 0; i < amissl_nfn; i++)
+		amissl_fn[i] = *(void **)((char *)IAmiSSL + off[i]);
 	return 0;
+}
+
+/* 5 or 6 while AmiSSL is open, else 0 */
+int amissl_version(void)
+{
+	return initialised ? amissl_api : 0;
 }
 
 void amissl_close(void)

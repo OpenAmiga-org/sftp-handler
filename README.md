@@ -81,11 +81,19 @@ The OS4 build needs the cross-compiler image
   password; Cancel works like a cancelled password requester. Connections
   whose login needed a code are kept while idle (CODEIDLETIME, default 0 =
   kept), as each new one needs a new code.
-- AmiSSL (`src/os4/amissl.c`): asks amisslmaster for `AMISSL_V3xx` (the
-  AmiSSL 5.1 API), not the SDK's `AMISSL_CURRENT_VERSION` (5.27), which
-  made 0.9 refuse older AmiSSL 5 versions such as 5.25. That is safe while
-  every function called through IAmiSSL is in the 5.1 interface at the
-  same place: `tools/check_amissl_api.py` checks it (make_lha.sh runs it).
+- AmiSSL (`src/os4/amissl.c`): one build works with AmiSSL 6 (OpenSSL 4,
+  `AMISSL_V4xx`, used when amisslmaster is 6 or newer) and with every
+  AmiSSL 5 (`AMISSL_V3xx` = 5.1; 0.9 asked for the SDK's
+  `AMISSL_CURRENT_VERSION`, 5.27, and refused 5.25 or AmiSSL 6 alone).
+  Their interface tables differ, so `-lamisslstubs` (fixed AmiSSL 5
+  offsets) is not linked: `tools/gen_amissl_glue.py` makes a stub for each
+  function in `tools/amissl_functions.txt` that calls through a table,
+  filled at open time with the offsets of the opened interface
+  (`offsetof()` compiled with the AmiSSL 5.27 and 6.1 headers). A function
+  missing from the list shows as an undefined reference.
+  `tools/check_amissl_api.py` (make_lha.sh runs it) checks that each one
+  is in AmiSSL 5.1 at the same place and in AmiSSL 6 with the same
+  prototype.
 - chmod sends only the owner's r/w bits; group/other stay as they are.
 - filesysbox maps EACCES, EIO, EXDEV... to "Error -1"; the glue maps them
   to the nearest AmigaDOS errors.

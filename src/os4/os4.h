@@ -20,6 +20,7 @@ int  req_choice(const char *title, const char *text, const char *buttons);
 /* amissl.c: 0, -1 (no bsdsocket.library) or -2 (no usable AmiSSL) */
 int  amissl_open(void);
 void amissl_close(void);
+int  amissl_version(void); /* 5 or 6 while open, else 0 */
 
 /* platform_os4.c */
 extern int plat_charset;   /* messages are converted to it, -1 = no */

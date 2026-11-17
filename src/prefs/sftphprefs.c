@@ -601,7 +601,7 @@ static void test_connection(void)
 		g.amissl = amissl_open() == 0 && sftp_global_init() == 0 ? 1 : -1;
 	}
 	if (s.protocol == PROTO_SFTP && g.amissl < 0) {
-		tell("SFTP needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
+		tell("SFTP needs AmiSSL 5 (5.1 or newer) or AmiSSL 6\n(and a TCP/IP stack).\n"
 		     "AmiSSL: OS4Depot library/misc/amissl.lha");
 		return;
 	}

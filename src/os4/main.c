@@ -560,12 +560,13 @@ static int handler_main(struct DosPacket *pkt)
 	argbuf = NULL;
 
 	if (amissl_open() != 0) {
-		req_message(SFH_VERS, "This handler needs AmiSSL 5 or newer (and a TCP/IP stack).\n"
+		req_message(SFH_VERS, "This handler needs AmiSSL 5 (5.1 or newer) or AmiSSL 6\n(and a TCP/IP stack).\n"
 		            "AmiSSL: https://github.com/jens-maus/amissl/releases\n"
 		            "or OS4Depot: library/misc/amissl.lha");
 		err = ERROR_INVALID_RESIDENT_LIBRARY;
 		goto fail;
 	}
+	plat_log(LOG_DEBUG, "AmiSSL %d\n", amissl_version());
 	if (sftp_global_init() != 0) {
 		req_message(SFH_VERS, "The SSH library could not be set up (AmiSSL).");
 		err = ERROR_INVALID_RESIDENT_LIBRARY;

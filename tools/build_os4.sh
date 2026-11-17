@@ -23,7 +23,7 @@ if [ "$1" != nettest ] && [ "${SFH_NO_BUMP:-}" = "" ]; then
 	sed -i "s/^#define SFH_REVISION .*/#define SFH_REVISION $((rev + 1))/" "$VH"
 	sed -i "s/^#define SFH_DATE .*/#define SFH_DATE     \"$(date +%-d.%-m.%Y)\"/" "$VH"
 fi
-if [ ! -f "$ROOT/build/deps/libssh2-amissl/lib/libssh2.a" ]; then
+if [ ! -f "$ROOT/build/deps/libssh2-amissl/lib/libssh2.a" ] || [ ! -d "$ROOT/build/deps/amissl6-sdk/AmiSSL" ]; then
 	"$ROOT/tools/build_deps_os4.sh"
 fi
 
@@ -34,6 +34,10 @@ if [ "$(git -C "$ROOT" branch --show-current)" != main ]; then
 fi
 
 mkdir -p "$ROOT/build/os4"
+# the AmiSSL stubs for AmiSSL 5 and 6 (see tools/gen_amissl_glue.py)
+if [ "$1" != nettest ]; then
+	python3 -I "$ROOT/tools/gen_amissl_glue.py" "$ROOT/build/os4"
+fi
 docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -v "$ROOT":/src -w /src "$IMAGE" \
 	make -f tools/os4.mk "${beta[@]}" "$@" < /dev/null
 for f in sftp-handler sftphprefs; do

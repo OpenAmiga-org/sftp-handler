@@ -2,7 +2,8 @@
 # Builds a static libssh2 for AmigaOS 4 (clib4) that uses AmiSSL for its
 # cryptography, in the cross-compiler image. Results:
 #   build/deps/libssh2-amissl/{include,lib}
-#   build/deps/amissl-sdk/AmiSSL/Developer   (AmiSSL SDK)
+#   build/deps/amissl-sdk/AmiSSL/Developer   (AmiSSL 5 SDK: headers, libssh2)
+#   build/deps/amissl6-sdk/AmiSSL/Developer  (AmiSSL 6 SDK: interface offsets)
 #   build/deps/amissl-clib4/libamisslauto.a
 #
 # libssh2's configure looks for libssl/libcrypto: empty stand-ins satisfy
@@ -21,6 +22,7 @@ SSH2_POLL="${SSH2_POLL:-no}"
 SSH2_PREFIX="${SSH2_PREFIX:-libssh2-amissl}"
 SSH2_SHA256=9954cb54c4f548198a7cbebad248bdc87dd64bd26185708a294b2b50771e3769
 AMISSL_VER=5.27
+AMISSL6_VER=6.1
 LHA="${LHA:-$HOME/linux_archivers/lha/lha}"
 
 mkdir -p "$DEPS"
@@ -34,6 +36,11 @@ if [ ! -d amissl-sdk/AmiSSL ]; then
 	gh release download "$AMISSL_VER" -R jens-maus/amissl -p "AmiSSL-$AMISSL_VER-SDK.lha" --clobber
 	mkdir -p amissl-sdk
 	(cd amissl-sdk && "$LHA" xq "../AmiSSL-$AMISSL_VER-SDK.lha" >/dev/null)
+fi
+if [ ! -d amissl6-sdk/AmiSSL ]; then
+	gh release download "$AMISSL6_VER" -R jens-maus/amissl -p "AmiSSL-$AMISSL6_VER-SDK.lha" --clobber
+	mkdir -p amissl6-sdk
+	(cd amissl6-sdk && "$LHA" xq "../AmiSSL-$AMISSL6_VER-SDK.lha" >/dev/null)
 fi
 
 rm -rf ssh2-build "$SSH2_PREFIX" amissl-clib4

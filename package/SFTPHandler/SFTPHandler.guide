@@ -49,7 +49,7 @@ Supported:
  - @{b}clib4.library 2.5@{ub} or newer (not part of AmigaOS)
    OS4Depot: development/library/misc/clib4.lha
    https://github.com/AmigaLabs/clib4/releases
- - @{b}AmiSSL 5@{ub} or newer, for SFTP (not part of AmigaOS)
+ - @{b}AmiSSL 5@{ub} (5.1 or newer) or @{b}AmiSSL 6@{ub}, for SFTP (not part of AmigaOS)
    OS4Depot: library/misc/amissl.lha
    https://github.com/jens-maus/amissl/releases
  - a TCP/IP stack (Roadshow)
@@ -241,8 +241,9 @@ sites.xml is plain XML (UTF-8):
 @node History "History"
 @{b}History@{ub}
 
-@{b}0.10 (17.11.2026)@{ub}
- - Works with every AmiSSL 5 (5.1 or newer): 0.9 needed AmiSSL 5.27 and said "needs AmiSSL 5 or newer" with an older one such as 5.25.
+@{b}0.11 (17.11.2026)@{ub}
+ - SFTP two-factor logins, first in the 0.10 beta: see @{"Two-factor logins" link TwoFactor}.
+ - Works with AmiSSL 6 and with every AmiSSL 5 (5.1 or newer): 0.9 needed AmiSSL 5.27 and said "needs AmiSSL 5 or newer" with an older one such as 5.25 or with only AmiSSL 6.
  - New icons in the AmigaOS 4.1 style.
  - SFTP: has a volume icon of its own: Install copies def_SFTP.info to ENVARC:Sys and ENV:Sys, where Workbench looks for it.
 

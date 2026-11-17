@@ -8,7 +8,7 @@ email:
 url:
 category: driver/handler
 replaces:
-requirements: clib4.library 2.5, filesysbox.library 54.8, AmiSSL 5 (SFTP)
+requirements: clib4.library 2.5, filesysbox.library 54.8, AmiSSL 5.1+ or 6 (SFTP)
 license: Public domain
 minosversion: 4.1
 texttype: Plain text
@@ -47,7 +47,7 @@ Requirements (not included, get them from OS4Depot):
 
 - clib4.library 2.5 or newer:
   OS4Depot development/library/misc/clib4.lha
-- AmiSSL 5 or newer (for SFTP):
+- AmiSSL 5 (5.1 or newer) or AmiSSL 6 (for SFTP):
   OS4Depot library/misc/amissl.lha
 - filesysbox.library 54.8 or newer (AmigaOS 4.1 Final Edition updates)
 
@@ -56,10 +56,15 @@ add your sites. SFTPHandler.guide has all the details.
 
 History:
 
-- 0.10 (2026-11-17): works with every AmiSSL 5 (5.1 or newer): 0.9 needed
-  AmiSSL 5.27 and said "needs AmiSSL 5 or newer" with an older one such
-  as 5.25. New icons in the AmigaOS 4.1 style, and a volume icon for SFTP:
-  (Install copies it to ENVARC:Sys/def_SFTP.info).
+- 0.11 (2026-11-17): SFTP two-factor logins (first in the 0.10 beta): the
+  server's questions (such as "Verification code:") are asked with a
+  requester, logins in two steps (key and code, key and password) work,
+  a connection that needed a code stays open while unused (DOSDriver
+  option CODEIDLETIME). Works with AmiSSL 6 and with every AmiSSL 5 (5.1
+  or newer): 0.9 needed AmiSSL 5.27 and said "needs AmiSSL 5 or newer"
+  with an older one such as 5.25 or with only AmiSSL 6. New icons in the
+  AmigaOS 4.1 style, and a volume icon for SFTP: (Install copies it to
+  ENVARC:Sys/def_SFTP.info).
 - 0.10 beta (2026-11-17): BETA from the 2fa branch, not for OS4Depot.
   SFTP two-factor logins: the server's questions (such as "Verification
   code:") are asked with a requester, logins in two steps (key and code,
