@@ -98,6 +98,9 @@ done
 cp "$I/Prefs_sftphprefs.info" "$D/Prefs/sftphprefs.info"
 cp "$I/Devs_DOSDrivers.info" "$D/Devs/DOSDrivers.info"
 cp "$I/Devs_DOSDrivers_SFTP.info" "$D/Devs/DOSDrivers/SFTP.info"
+# the volume icon of SFTP: (Install copies it to ENVARC:Sys and ENV:Sys)
+mkdir -p "$D/Prefs/Env-Archive/Sys"
+cp "$I/def_SFTP.info" "$D/Prefs/Env-Archive/Sys/def_SFTP.info"
 
 rm -f "$OUT"
 (cd "$STAGE" && "$LHA" aq2o5 "$OUT" SFTPHandler.info SFTPHandler.readme SFTPHandler)
