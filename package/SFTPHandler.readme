@@ -56,6 +56,8 @@ add your sites. SFTPHandler.guide has all the details.
 
 History:
 
+- 0.10 (2026-11-17): new icons in the AmigaOS 4.1 style, and a volume
+  icon for SFTP: (Install copies it to ENVARC:Sys/def_SFTP.info).
 - 0.10 beta (2026-11-17): BETA from the 2fa branch, not for OS4Depot.
   SFTP two-factor logins: the server's questions (such as "Verification
   code:") are asked with a requester, logins in two steps (key and code,

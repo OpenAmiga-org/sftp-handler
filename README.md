@@ -26,7 +26,7 @@ Built on filesysbox.library, clib4, libssh2 and AmiSSL.
                 `tests/totp.py`)
 - `package/`    release files: Install script, AmigaGuide, DOSDriver,
                 readme, icons (`icons/README.md`), third-party licences
-- `tools/`      build scripts, icon pictures (`make_icons.py`, `os4/mkicon.c`)
+- `tools/`      build scripts, icon conversion (`make_icons.py`, `os4/mkicon.c`)
 
 ## Building
 

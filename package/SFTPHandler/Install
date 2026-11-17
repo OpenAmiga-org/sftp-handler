@@ -123,6 +123,39 @@
     (nogauge))
 )
 
+; --- volume icon ----------------------------------------------------------
+
+; Workbench shows the SFTP: volume with ENV:Sys/def_SFTP.info, the same way
+; as def_DF0 or def_RAD; the copy in ENVARC:Sys keeps it after a restart.
+; (or) evaluates all its arguments, so the question needs an (if) of its own
+(set #icon "Prefs/Env-Archive/Sys/def_SFTP.info")
+(set #copyicon 1)
+(if (exists "ENVARC:Sys/def_SFTP.info")
+  (set #copyicon
+    (askbool
+      (prompt "ENVARC:Sys/def_SFTP.info (the icon of the SFTP: volume) "
+              "exists already. Replace it?")
+      (help @askbool-help)
+      (default 1))))
+(if #copyicon
+  (
+    (if (not (exists "ENVARC:Sys")) (makedir "ENVARC:Sys"))
+    (if (not (exists "ENV:Sys")) (makedir "ENV:Sys"))
+    (copyfiles
+      (prompt "Copying the icon of the SFTP: volume to ENVARC:Sys")
+      (help @copyfiles-help)
+      (source #icon)
+      (dest "ENVARC:Sys")
+      (nogauge))
+    (copyfiles
+      (prompt "Copying the icon of the SFTP: volume to ENV:Sys")
+      (help @copyfiles-help)
+      (source #icon)
+      (dest "ENV:Sys")
+      (nogauge))
+  )
+)
+
 ; --- documentation ------------------------------------------------------
 
 (set #docdir

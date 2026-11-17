@@ -66,10 +66,12 @@ Double-click @{b}Install@{ub}. It copies
    SYS:Prefs/sftphprefs            the prefs program
    DEVS:DOSDrivers/SFTP            the DOSDriver (SFTP: is mounted at boot)
                                    or SYS:Storage/DOSDrivers/SFTP
+   ENVARC:Sys/def_SFTP.info        the icon of the SFTP: volume
+                                   (and ENV:Sys/def_SFTP.info)
 
 and the documentation. Then start sftphprefs and add your sites.
 
-By hand: copy the same files, then @{b}Mount DEVS:DOSDrivers/SFTP@{ub}.
+By hand: copy the same files (the volume icon is in Prefs/Env-Archive/Sys in the archive), then @{b}Mount DEVS:DOSDrivers/SFTP@{ub}.
 
 Updating: run Install again. While SFTP: is mounted its handler keeps L:sftp-handler in use, so Install stops it (Dismount SFTP:) and mounts it again at the end; close any files open on SFTP: first. By hand: @{b}Dismount SFTP:@{ub}, copy, @{b}Mount DEVS:DOSDrivers/SFTP@{ub}.
 @endnode
@@ -223,6 +225,7 @@ Add DEBUG to the Startup line (see @{"DOSDriver options" link Options}), mount a
    L:sftp-handler                      the handler
    SYS:Prefs/sftphprefs                the prefs program
    DEVS:DOSDrivers/SFTP                the DOSDriver
+   ENVARC:Sys/def_SFTP.info            the icon of the SFTP: volume
    ENV:SFTPHandler/sites.xml           the sites in use
    ENVARC:SFTPHandler/sites.xml        the saved sites
    ENVARC:SFTPHandler/known_hosts      SFTP host keys
@@ -237,6 +240,10 @@ sites.xml is plain XML (UTF-8):
 
 @node History "History"
 @{b}History@{ub}
+
+@{b}0.10 (17.11.2026)@{ub}
+ - New icons in the AmigaOS 4.1 style.
+ - SFTP: has a volume icon of its own: Install copies def_SFTP.info to ENVARC:Sys and ENV:Sys, where Workbench looks for it.
 
 @{b}0.10 beta (17.11.2026)@{ub}
  - BETA from the 2fa branch: not for OS4Depot.
