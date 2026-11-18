@@ -216,7 +216,7 @@ Use the newest code and type it quickly. Codes from an authenticator app depend 
 The handler uses passive mode with the server's address of the control connection. A firewall that blocks the passive data ports stops listings and transfers.
 
 @{b}FTP: big folders fill slowly@{ub}
-Workbench reads the start of every file in a folder it opens, to choose its icon. Over FTP each of these reads needs a data connection of its own. Some servers (ZitaFTP Server, for one) give data connections a port from a small range, and a port stays busy for a while after use: when all are taken, the server answers "425 cannot open data connection". The handler then waits for a free one (up to the TIMEOUT) and asks again. A bigger data port range in the server's settings makes such folders open faster. A file that still gets no data connection reports "Object in use".
+Workbench reads the start of every file in a folder it opens, to choose its icon. Over FTP each of these reads needs a data connection of its own. Some servers give data connections a port from a small range, and a port stays busy for a while after use: when all are taken, the server answers "425 cannot open data connection". The handler then waits for a free one (up to the TIMEOUT) and asks again. A bigger data port range in the server's settings makes such folders open faster. A file that still gets no data connection reports "Object in use".
 
 @{b}More detail@{ub}
 Add DEBUG to the Startup line (see @{"DOSDriver options" link Options}), mount again and read the output with DumpDebugBuffer.
@@ -243,6 +243,9 @@ sites.xml is plain XML (UTF-8):
 
 @node History "History"
 @{b}History@{ub}
+
+@{b}0.14 (18.11.2026)@{ub}
+ - FTP: big folders on ZitaFTP Server no longer end in "No disk present". Workbench reads only the start of each file, so most downloads are cut short. ZitaFTP often sent no reply for that (the handler waited 5 seconds and logged in again, for every such file) and sometimes one reply too many (the handler then took each reply for the answer to the next command, and every file failed). Cut downloads now end with ABOR, and late replies are dropped.
 
 @{b}0.13 (18.11.2026)@{ub}
  - Clearer messages instead of "Error -1": a server that refuses to save a file now gives "file is write protected" (also when the file is opened or saved), and "file too large" gives "disk is full".

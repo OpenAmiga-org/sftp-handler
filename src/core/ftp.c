@@ -31,6 +31,7 @@ typedef struct {
 	char    *cwd;           /* current folder on the server, NULL = unknown */
 	rhandle *stream;        /* download using this connection */
 	int64_t  used;          /* plat_ms() of the last command */
+	int      aborted;       /* a download was cut short: late replies may come */
 } ftp_conn;
 
 struct rhandle {
@@ -129,6 +130,38 @@ static int get_reply(ftp_remote *fr, ftp_conn *c)
 	return code;
 }
 
+/* Drops the replies that are waiting already, or arrive within ms: no
+ * reply is due when this is called, so they belong to an earlier command
+ * (servers such as ZitaFTP send one reply too many, or a late one, after
+ * a download that was cut short). */
+static void drain(ftp_remote *fr, ftp_conn *c, int ms)
+{
+	for (;;) {
+		char *nl;
+		int n;
+
+		while ((nl = memchr(c->rbuf, '\n', c->rlen)) != NULL) {
+			size_t len = (size_t)(nl - c->rbuf) + 1;
+
+			plat_log(LOG_INFO, "ftp %s: late reply dropped: %.*s\n", fr->site.name,
+			         (int)(len > 1 && c->rbuf[len - 2] == '\r' ? len - 2 : len - 1), c->rbuf);
+			memmove(c->rbuf, c->rbuf + len, c->rlen - len);
+			c->rlen -= len;
+		}
+		if (c->sock < 0 || c->rlen == sizeof(c->rbuf))
+			return;
+		n = net_recv(c->sock, c->rbuf + c->rlen, sizeof(c->rbuf) - c->rlen, ms);
+		if (n == -ETIMEDOUT)
+			return;
+		if (n <= 0) {
+			plat_log(LOG_INFO, "ftp %s: connection lost (%d)\n", fr->site.name, n);
+			conn_close(c);
+			return;
+		}
+		c->rlen += (size_t)n;
+	}
+}
+
 static int send_cmd(ftp_remote *fr, ftp_conn *c, const char *fmt, va_list ap)
 {
 	char cmd[1200];
@@ -150,6 +183,25 @@ static int send_cmd(ftp_remote *fr, ftp_conn *c, const char *fmt, va_list ap)
 	return 0;
 }
 
+static int send_line(ftp_remote *fr, ftp_conn *c, const char *fmt, ...)
+	__attribute__((format(printf, 3, 4)));
+static int send_line(ftp_remote *fr, ftp_conn *c, const char *fmt, ...)
+{
+	va_list ap;
+	int err;
+
+	va_start(ap, fmt);
+	err = send_cmd(fr, c, fmt, ap);
+	va_end(ap);
+	return err;
+}
+
+static int send_abor(ftp_remote *fr, ftp_conn *c)
+{
+	drain(fr, c, 0);
+	return c->sock < 0 ? -ENOTCONN : send_line(fr, c, "ABOR");
+}
+
 /* Sends a command and reads the reply; returns the code or -errno. */
 static int cmd(ftp_remote *fr, ftp_conn *c, const char *fmt, ...)
 	__attribute__((format(printf, 3, 4)));
@@ -160,12 +212,28 @@ static int cmd(ftp_remote *fr, ftp_conn *c, const char *fmt, ...)
 
 	if (c->sock < 0)
 		return -ENOTCONN;
+	drain(fr, c, 0);
+	if (c->sock < 0)
+		return -ENOTCONN;
 	va_start(ap, fmt);
 	err = send_cmd(fr, c, fmt, ap);
 	va_end(ap);
 	if (err != 0)
 		return err;
-	return get_reply(fr, c);
+	err = get_reply(fr, c);
+	if (c->aborted) {
+		int skip;
+
+		/* 225/226/426 only end a transfer or an ABOR, never answer the
+		 * commands sent with cmd(): a late reply to the cut download */
+		for (skip = 0; skip < 3 && (err == 225 || err == 226 || err == 426); skip++) {
+			plat_log(LOG_INFO, "ftp %s: late reply %d skipped\n", fr->site.name, err);
+			err = get_reply(fr, c);
+		}
+		if (err > 0)
+			c->aborted = 0;
+	}
+	return err;
 }
 
 /* the reply text without the codes, for messages */
@@ -457,9 +525,9 @@ static void put_conn(ftp_conn *c)
 /* --- paths and data connections ------------------------------------------- */
 
 /* One try for a data connection. -EBUSY: the server has no data port free
- * right now ("425 cannot open data connection": ZitaFTP Server, for one,
- * gives each data connection a port from a fixed range, and a port stays
- * busy for a while after its connection closed). */
+ * right now ("425 cannot open data connection": a server that gives each
+ * data connection a port from a small range, where a port may stay busy
+ * for a while after its connection closed). */
 static int open_data_once(ftp_remote *fr, ftp_conn *c)
 {
 	int code, port = -1;
@@ -1015,13 +1083,29 @@ static void stream_stop(ftp_remote *fr, rhandle *h)
 		return;
 	h->c = NULL;
 	if (c->sock >= 0) {
-		int saved = fr->env.io_timeout_ms, code;
+		int saved = fr->env.io_timeout_ms, code = 0, i = 0;
 
+		/* The download was cut short (Workbench, for one, reads only the
+		 * start of each file). Ask the server to abort: some send no
+		 * reply for a cut download (ZitaFTP), but all answer ABOR (225/226,
+		 * or 500/502 if they do not know it). 426/451 on the way are about
+		 * the cut transfer. A server that says nothing loses its control
+		 * connection; replies that come after the one for ABOR are dropped
+		 * (drain, and cmd() skips late 225/226/426). */
+		c->aborted = 1;
 		fr->env.io_timeout_ms = 5000;
-		code = get_reply(fr, c);
+		if (send_abor(fr, c) == 0) {
+			for (i = 0; i < 4; i++) {
+				code = get_reply(fr, c);
+				if (code < 0 || code == 225 || code == 226 || code >= 500)
+					break;
+			}
+		}
 		fr->env.io_timeout_ms = saved;
-		if (code < 0 || code < 200)
+		if (c->sock >= 0 && (code < 200 || i == 4))
 			conn_close(c);
+		else if (c->sock >= 0)
+			drain(fr, c, 300);
 	}
 	put_conn(c);
 }

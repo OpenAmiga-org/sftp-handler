@@ -4,7 +4,8 @@ that matter for sftp-handler. Plain FTP, reading only. Public domain.
 
     python3 -I testserver/zitasim.py ROOT [--port 2124] [--host 127.0.0.1]
             [--data-ports 22000:20] [--port-hold 30] [--max-clients 0]
-            [--abort-reply 451|226|none] [--user test] [--password test123]
+            [--abort-reply 451|226|none|two|two-late] [--user test]
+            [--password test123]
 
 Like ZitaFTP: FEAT without MLSD, its reply texts, and a fixed range of data
 ports. EPSV/PASV take a free port from the range; a port stays busy for
@@ -12,7 +13,12 @@ ports. EPSV/PASV take a free port from the range; a port stays busy for
 TIME_WAIT would keep it), and when none is free the reply is
 "425 cannot open data connection". More than --max-clients connections get
 "421 max clients exceeded (N)". When the client closes a download's data
-connection early, the reply is --abort-reply (ZitaFTP has no 426).
+connection early, the reply is --abort-reply (ZitaFTP has no 426): one
+reply, none at all, two ("451 local error", then "226 closing data
+connection"), or two with the second one second later (two-late). ZitaFTP
+does each of these (seen in a user's ZitaFTP log: often no reply, and after
+"Sending file ... failed" a reply too many). ABOR gets "226 closing data
+connection".
 Every command goes to stderr with a time stamp.
 """
 import argparse
@@ -178,8 +184,14 @@ class Client:
         self.end_data(d)
         if not cut:
             self.reply("226 closing data connection")
-        elif ARGS.abort_reply != "none":
-            self.reply("451 local error" if ARGS.abort_reply == "451" else "226 closing data connection")
+        elif ARGS.abort_reply in ("451", "two", "two-late"):
+            self.reply("451 local error")
+            if ARGS.abort_reply == "two-late":
+                time.sleep(1)
+            if ARGS.abort_reply != "451":
+                self.reply("226 closing data connection")
+        elif ARGS.abort_reply == "226":
+            self.reply("226 closing data connection")
 
     def run(self):
         self.reply("220 Welcome")
@@ -278,7 +290,7 @@ def main():
     ap.add_argument("--data-ports", default="22000:20")
     ap.add_argument("--port-hold", type=float, default=30)
     ap.add_argument("--max-clients", type=int, default=0)
-    ap.add_argument("--abort-reply", choices=("451", "226", "none"), default="451")
+    ap.add_argument("--abort-reply", choices=("451", "226", "none", "two", "two-late"), default="451")
     ap.add_argument("--user", default="test")
     ap.add_argument("--password", default="test123")
     ARGS = ap.parse_args()

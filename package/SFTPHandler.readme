@@ -60,6 +60,12 @@ add your sites. SFTPHandler.guide has all the details.
 
 History:
 
+- 0.14 (2026-11-18): FTP: big folders on ZitaFTP Server no longer end in
+  "No disk present", and open much faster. Workbench reads only the start
+  of each file; ZitaFTP often sent no reply for such a cut download (the
+  handler waited 5 seconds and logged in again) and sometimes one reply
+  too many (the replies got out of step). Cut downloads now end with
+  ABOR, and late replies are dropped.
 - 0.13 (2026-11-18): clearer messages instead of "Error -1": a server
   that refuses to save a file gives "file is write protected" (also when
   the file is opened or saved), "file too large" gives "disk is full".

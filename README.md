@@ -26,9 +26,10 @@ Built on filesysbox.library, clib4, libssh2 and AmiSSL.
 - `testserver/` throwaway FTP (vsftpd) and SFTP (OpenSSH) servers in Docker,
                 and `otp/`: OpenSSH with two-factor logins (TOTP codes from
                 `tests/totp.py`); `zitasim.py`: an FTP server that behaves
-                like ZitaFTP Server (a small data port range: "425 cannot
-                open data connection"; "421 max clients exceeded"), started
-                by the tests
+                like ZitaFTP Server (no reply or two replies after a cut
+                download, "421 max clients exceeded"; optionally a small
+                busy data port range: "425 cannot open data connection"),
+                started by the tests
 - `package/`    release files: Install script, AmigaGuide, DOSDriver,
                 readme, icons (`icons/README.md`), third-party licences
 - `tools/`      build scripts, icon conversion (`make_icons.py`, `os4/mkicon.c`)
@@ -73,10 +74,16 @@ The OS4 build needs the cross-compiler image
   when the server allows fewer, a download is stopped and continues later
   with REST. Writes go to a temp file and are uploaded on close (FTP
   cannot change part of a file); a failed upload is kept in KEEPDIR.
-  "425 cannot open data connection" (a server's data port range used up,
-  e.g. ZitaFTP Server while Workbench reads the start of every file of a
-  big folder) is waited out with growing pauses, up to the I/O timeout;
-  then -EBUSY ("Object in use"), not EIO ("No disk present").
+  Workbench reads the start of every file of a folder it opens, so a big
+  folder means many downloads that are cut short: those end with ABOR,
+  and replies that come after the one for ABOR are dropped (before each
+  command, and late 225/226/426 are skipped). ZitaFTP Server often sends
+  no reply for a cut download (the handler waited 5 s and logged in
+  again before 0.14) and sometimes one reply too many (the replies got
+  out of step: "No disk present" for everything after). "425 cannot open
+  data connection" (a server's data port range used up) is waited out
+  with growing pauses, up to the I/O timeout; then -EBUSY ("Object in
+  use"), not EIO ("No disk present").
 - SFTP (`sftp.c`): libssh2 in blocking mode with timeouts, server-side
   handles read and written at any offset. Host keys in OpenSSH
   known_hosts. `libssh2_keepalive_config()` must come after the

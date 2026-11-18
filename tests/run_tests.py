@@ -727,7 +727,51 @@ def t_ftp_max_clients():
             assert got[i] == bytes([i]) * 300000, i
 
 
-ZITA_TESTS = [t_ftp_data_ports_busy, t_ftp_data_ports_gone, t_ftp_max_clients]
+def zita_cut_reads(mode):
+    """reads the start of 8 big files like Workbench's DefIcons: each
+    download is cut short; returns the seconds and the server's logins"""
+    # 64 MB (sparse): more than the socket buffers hold, so every download
+    # really is cut short
+    os.makedirs(os.path.join(ZITA_DATA, "many"), exist_ok=True)
+    for i in range(8):
+        with open(os.path.join(ZITA_DATA, "many", f"file{i:03d}.lha"), "wb") as f:
+            f.write(bytes([i]) * 512)
+            f.truncate(64 * 1024 * 1024)
+    log = os.path.join(WORK, "zitasim.log")
+    start = os.path.getsize(log) if os.path.exists(log) else 0
+    with Zita("--abort-reply", mode), Mount():
+        d = os.path.join(MNT, "Zita", "many")
+        t = time.time()
+        for n in sorted(os.listdir(d)):
+            with open(os.path.join(d, n), "rb") as f:
+                assert len(f.read(480)) == 480, n
+        took = time.time() - t
+        with open(os.path.join(d, "file007.lha"), "rb") as f:
+            assert f.read(3) == bytes([7]) * 3
+    with open(log) as f:
+        f.seek(start)
+        logins = f.read().count("< 230 logged in")
+    return took, logins
+
+
+def t_ftp_cut_no_reply():
+    # ZitaFTP often sends no reply for a cut download: ABOR gets one, so no
+    # 5 s wait and new login per file
+    took, logins = zita_cut_reads("none")
+    assert took < 8, took
+    assert logins <= 2, logins
+
+
+def t_ftp_cut_two_replies():
+    # one reply too many after a cut download (ZitaFTP after "Sending file
+    # failed"): the next command must not take it for its answer (it was
+    # "No disk present" for every file after that)
+    zita_cut_reads("two")
+    zita_cut_reads("two-late")
+
+
+ZITA_TESTS = [t_ftp_data_ports_busy, t_ftp_data_ports_gone, t_ftp_max_clients,
+              t_ftp_cut_no_reply, t_ftp_cut_two_replies]
 
 
 OTP_TESTS = [t_2fa_code, t_2fa_key_then_code, t_2fa_key_then_password,
