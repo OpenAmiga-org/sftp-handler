@@ -1,0 +1,67 @@
+--- a/src/openssl.h	2024-10-16 10:03:21.000000000 +0200
++++ b/src/openssl.h	2026-11-18 06:35:43.388301879 +0100
+@@ -460,4 +460,11 @@
+ const EVP_CIPHER *_libssh2_EVP_aes_192_ctr(void);
+ const EVP_CIPHER *_libssh2_EVP_aes_256_ctr(void);
+ 
++#ifdef LIBSSH2_OPENSSL
++/* _libssh2_cipher_crypt() accepts several whole blocks in one call as long
++   as they are neither the first nor the last block of a packet (the data
++   is then en/decrypted in place) */
++#define LIBSSH2_CIPHER_CRYPT_MULTI 1
++#endif
++
+ #endif /* LIBSSH2_OPENSSL_H */
+--- a/src/openssl.c	2024-10-16 10:03:21.000000000 +0200
++++ b/src/openssl.c	2026-11-18 06:35:43.388812013 +0100
+@@ -1047,6 +1047,25 @@
+ 
+     (void)algo;
+ 
++#ifdef LIBSSH2_CIPHER_CRYPT_MULTI
++    if(blocksize > sizeof(buf)) {
++        /* several whole middle blocks (see transport.c): no AAD, no tag,
++           so en/decrypt them in place in one call; OpenSSL allows the
++           output to be the input for CTR, CBC and GCM */
++        assert(!IS_FIRST(firstlast) && !IS_LAST(firstlast));
++#ifdef HAVE_OPAQUE_STRUCTS
++        ret = EVP_Cipher(*ctx, block, block, (unsigned int)blocksize);
++#else
++        ret = EVP_Cipher(ctx, block, block, (unsigned int)blocksize);
++#endif
++#if defined(USE_OPENSSL_3) || defined(LIBSSH2_WOLFSSL)
++        return ret == -1;
++#else
++        return ret < 1;
++#endif
++    }
++#endif
++
+     assert(blocksize <= sizeof(buf));
+     assert(cryptlen >= 0);
+ 
+--- a/src/transport.c	2024-10-16 10:03:21.000000000 +0200
++++ b/src/transport.c	2026-11-18 06:35:43.389095136 +0100
+@@ -155,6 +155,22 @@
+             decryptlen = len;
+             lowerfirstlast = LAST_BLOCK;
+         }
++#ifdef LIBSSH2_CIPHER_CRYPT_MULTI
++        /* Decrypt all whole middle blocks in one call instead of one call
++           per block: everything except what the code above must still see
++           as the last part of the packet (one block, or with AAD the last
++           block plus the bytes that are not a whole block). */
++        else if(lowerfirstlast == MIDDLE_BLOCK) {
++            ssize_t tail = len % blocksize;
++            ssize_t multi;
++
++            if(IS_LAST(firstlast))
++                tail += blocksize;
++            multi = len - tail;
++            if(multi > blocksize)
++                decryptlen = multi;
++        }
++#endif
+ 
+         if(session->remote.crypt->crypt(session, 0, source, decryptlen,
+                                         &session->remote.crypt_abstract,

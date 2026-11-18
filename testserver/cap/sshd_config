@@ -1,0 +1,12 @@
+# sftph-cap test server: OpenSSH's sftp-server behind sftpcap.py, which
+# shortens every read request to the cap in /srv/cap/cap.
+Port 22
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+PasswordAuthentication yes
+KbdInteractiveAuthentication no
+UsePAM no
+StrictModes no
+# the default ciphers plus CBC, so that every cipher family can be tested
+Ciphers +aes128-cbc,aes192-cbc,aes256-cbc
+Subsystem sftp /usr/local/bin/sftpcap.py

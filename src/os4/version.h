@@ -3,7 +3,7 @@
 #define SFH_VERSION_H
 
 #define SFH_VERSION  0
-#define SFH_REVISION 14
+#define SFH_REVISION 15
 #define SFH_DATE     "18.11.2026"
 
 #define SFH_STR2(x) #x

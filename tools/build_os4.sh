@@ -23,7 +23,9 @@ if [ "$1" != nettest ] && [ "${SFH_NO_BUMP:-}" = "" ]; then
 	sed -i "s/^#define SFH_REVISION .*/#define SFH_REVISION $((rev + 1))/" "$VH"
 	sed -i "s/^#define SFH_DATE .*/#define SFH_DATE     \"$(date +%-d.%-m.%Y)\"/" "$VH"
 fi
-if [ ! -f "$ROOT/build/deps/libssh2-amissl/lib/libssh2.a" ] || [ ! -d "$ROOT/build/deps/amissl6-sdk/AmiSSL" ]; then
+# libssh2 again when its patches changed
+if [ ! -f "$ROOT/build/deps/libssh2-amissl/lib/libssh2.a" ] || [ ! -d "$ROOT/build/deps/amissl6-sdk/AmiSSL" ] ||
+   [ -n "$(find "$ROOT/tools/libssh2-patches" -newer "$ROOT/build/deps/libssh2-amissl/lib/libssh2.a" -name '*.patch')" ]; then
 	"$ROOT/tools/build_deps_os4.sh"
 fi
 

@@ -27,11 +27,18 @@ LHA="${LHA:-$HOME/linux_archivers/lha/lha}"
 
 mkdir -p "$DEPS"
 cd "$DEPS"
-if [ ! -d "libssh2-$SSH2_VER" ]; then
+if [ ! -f "libssh2-$SSH2_VER.tar.xz" ]; then
 	curl -s -L -o "libssh2-$SSH2_VER.tar.xz" "https://libssh2.org/download/libssh2-$SSH2_VER.tar.xz"
-	echo "$SSH2_SHA256  libssh2-$SSH2_VER.tar.xz" | sha256sum -c -
-	tar xf "libssh2-$SSH2_VER.tar.xz"
 fi
+echo "$SSH2_SHA256  libssh2-$SSH2_VER.tar.xz" | sha256sum -c - > /dev/null
+# a clean copy with our patches (tools/libssh2-patches: decrypting the
+# middle of a packet in one call; short SFTP read replies and a settable
+# read size), also used by tools/build_deps_linux.sh
+rm -rf "libssh2-$SSH2_VER"
+tar xf "libssh2-$SSH2_VER.tar.xz"
+for p in "$ROOT"/tools/libssh2-patches/*.patch; do
+	patch -s -p1 -d "libssh2-$SSH2_VER" < "$p"
+done
 if [ ! -d amissl-sdk/AmiSSL ]; then
 	gh release download "$AMISSL_VER" -R jens-maus/amissl -p "AmiSSL-$AMISSL_VER-SDK.lha" --clobber
 	mkdir -p amissl-sdk

@@ -276,6 +276,7 @@ static void usage(void)
 {
 	fprintf(stderr,
 	        "usage: sftph-fuse --config DIR [--icon FILE] [--cache-ms N] [--idle-ms N] [--code-idle-ms N]\n"
+	        "         [--timeout-ms N] [--ciphers LIST]\n"
 	        "         [--tempdir DIR] [--keepdir DIR] [--readonly] [--verbose|--debug]\n"
 	        "         MOUNTPOINT [fuse options]\n"
 	        "SFH_PASSWORD answers password requesters, SFH_HOSTKEY (save/once/refuse)\n"
@@ -305,6 +306,7 @@ int main(int argc, char **argv)
 		else if (strcmp(a, "--idle-ms") == 0 && v) { fo.idle_ms = atoi(v); i++; }
 		else if (strcmp(a, "--code-idle-ms") == 0 && v) { fo.code_idle_ms = atoi(v); i++; }
 		else if (strcmp(a, "--timeout-ms") == 0 && v) { fo.io_timeout_ms = atoi(v); i++; }
+		else if (strcmp(a, "--ciphers") == 0 && v) { fo.ciphers = v; i++; }
 		else if (strcmp(a, "--tempdir") == 0 && v) { fo.tempdir = v; i++; }
 		else if (strcmp(a, "--keepdir") == 0 && v) { fo.keepdir = v; i++; }
 		else if (strcmp(a, "--readonly") == 0) { fo.readonly = 1; }

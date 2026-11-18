@@ -29,16 +29,22 @@ Built on filesysbox.library, clib4, libssh2 and AmiSSL.
                 like ZitaFTP Server (no reply or two replies after a cut
                 download, "421 max clients exceeded"; optionally a small
                 busy data port range: "425 cannot open data connection"),
-                started by the tests
+                started by the tests; `cap/`: OpenSSH whose read replies
+                are cut to a cap (testserver/cap-data/cap/cap), with CBC
+                ciphers allowed, for the cipher and short-read tests
 - `package/`    release files: Install script, AmigaGuide, DOSDriver,
                 readme, icons (`icons/README.md`), third-party licences
-- `tools/`      build scripts, icon conversion (`make_icons.py`, `os4/mkicon.c`)
+- `tools/`      build scripts, icon conversion (`make_icons.py`, `os4/mkicon.c`);
+                `libssh2-patches/`: our changes to libssh2 1.11.1, applied by
+                `build_deps_os4.sh` and `build_deps_linux.sh` (the Linux test
+                build links the same patched libssh2, built by the Makefile)
 
 ## Building
 
     testserver/setup.sh            # once: start the test servers
     make test                      # Linux FUSE build, unit and server tests
-    tools/build_deps_os4.sh        # once: libssh2 for clib4 with AmiSSL
+    tools/build_deps_os4.sh        # libssh2 for clib4 with AmiSSL (build_os4.sh
+                                   # runs it when a patch changed)
     tools/build_os4.sh             # AmigaOS 4 handler and prefs (bumps the version)
     tests/os4/run_guest.py         # functional test in the QEMU guest (MCPd)
     tools/make_lha.sh              # release archive -> dist/SFTPHandler.lha
@@ -88,6 +94,20 @@ The OS4 build needs the cross-compiler image
   handles read and written at any offset. Host keys in OpenSSH
   known_hosts. `libssh2_keepalive_config()` must come after the
   handshake: set before it, the key exchange fails.
+- libssh2 patches (`tools/libssh2-patches`, reported upstream as
+  libssh2#2734 and #2735): 0001 decrypts the middle of a packet in one
+  `crypt()` call (1.11.1 makes one call per 16-byte block for every cipher
+  but chacha20-poly1305: aes128-ctr downloads 3.1 -> 8.45 MB/s in the
+  guest); 0002 handles short read replies (1.11.1 fails with "Read Packet
+  At Unexpected Offset" when a server gives less than asked for while
+  more requests are in flight, even at its default 30000 bytes) and adds
+  `libssh2_sftp_set_read_size()`: the handler asks for 255 KB per request
+  (OpenSSH's maximum); a server that gives less makes the handle ask for
+  less (learned only when the file goes on, so a short reply at the end of
+  a file does not shrink it). Tests: `t_sftp_ciphers` (every cipher
+  family) and `t_sftp_short_reads` (testserver/cap: OpenSSH behind a proxy
+  that cuts read requests to a cap) on Linux, `tests/os4/ciphers.py` in the
+  guest. DOSDriver option `CIPHERS` / `--ciphers` picks the ciphers.
 - Two-factor logins (SFTP): keyboard-interactive questions that are not the
   password go to `remote_env.ask` (a requester). libssh2 1.11 reports the
   first of two login steps (OpenSSH AuthenticationMethods) as a failure and

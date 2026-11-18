@@ -1,0 +1,187 @@
+--- a/include/libssh2_sftp.h	2024-10-16 10:03:21.000000000 +0200
++++ b/include/libssh2_sftp.h	2026-11-18 06:36:13.614258490 +0100
+@@ -277,6 +277,13 @@
+                                      libssh2_uint64_t offset);
+ #define libssh2_sftp_rewind(handle) libssh2_sftp_seek64((handle), 0)
+ 
++/* How many bytes each FXP_READ request asks for at most, for files opened
++   from now on (default 30000, at most 261120). A server that answers with
++   less makes the handle ask it for less. Returns the size now in use. */
++#define LIBSSH2_SFTP_HAVE_READ_SIZE 1
++LIBSSH2_API size_t libssh2_sftp_set_read_size(LIBSSH2_SFTP *sftp,
++                                              size_t size);
++
+ LIBSSH2_API size_t libssh2_sftp_tell(LIBSSH2_SFTP_HANDLE *handle);
+ LIBSSH2_API libssh2_uint64_t libssh2_sftp_tell64(LIBSSH2_SFTP_HANDLE *handle);
+ 
+--- a/src/sftp.h	2024-10-16 10:03:21.000000000 +0200
++++ b/src/sftp.h	2026-11-18 06:36:13.614790999 +0100
+@@ -47,9 +47,12 @@
+ #define MAX_SFTP_OUTGOING_SIZE 30000
+ 
+ /* MAX_SFTP_READ_SIZE is how much data is asked for at max in each FXP_READ
+- * packets.
++ * packets, unless libssh2_sftp_set_read_size() sets another size (up to
++ * MAX_SFTP_READ_SIZE_LIMIT, which keeps the reply below
++ * LIBSSH2_SFTP_PACKET_MAXLEN).
+  */
+ #define MAX_SFTP_READ_SIZE 30000
++#define MAX_SFTP_READ_SIZE_LIMIT (255 * 1024)
+ 
+ struct sftp_pipeline_chunk {
+     struct list_node node;
+@@ -114,6 +117,12 @@
+             size_t data_left;
+ 
+             char eof; /* we have read to the end */
++
++            /* size of each FXP_READ request; a short reply that is not the
++               end of the file lowers it (short_read is that reply's size
++               until the next reply shows the file goes on) */
++            size_t read_size;
++            size_t short_read;
+         } file;
+         struct _libssh2_sftp_handle_dir_data
+         {
+@@ -140,6 +149,9 @@
+ 
+     uint32_t request_id, version, posix_rename_version;
+ 
++    /* FXP_READ size for files opened from now on */
++    size_t read_size;
++
+     struct list_head packets;
+ 
+     /* List of FXP_READ responses to ignore because EOF already received. */
+--- a/src/sftp.c	2024-10-16 10:03:21.000000000 +0200
++++ b/src/sftp.c	2026-11-18 06:36:30.921871872 +0100
+@@ -868,6 +868,7 @@
+         }
+         sftp_handle->channel = session->sftpInit_channel;
+         sftp_handle->request_id = 0;
++        sftp_handle->read_size = MAX_SFTP_READ_SIZE;
+ 
+         _libssh2_htonu32(session->sftpInit_buffer, 5);
+         session->sftpInit_buffer[4] = SSH_FXP_INIT;
+@@ -1350,6 +1351,8 @@
+ 
+         fp->u.file.offset = 0;
+         fp->u.file.offset_sent = 0;
++        fp->u.file.read_size = sftp->read_size;
++        fp->u.file.short_read = 0;
+ 
+         _libssh2_debug((session, LIBSSH2_TRACE_SFTP,
+                        "Open command successful"));
+@@ -1410,6 +1413,7 @@
+     struct _libssh2_sftp_handle_file_data *filep =
+         &handle->u.file;
+     size_t bytes_in_buffer = 0;
++    size_t short_read = 0;
+     char *sliding_bufferp = buffer;
+ 
+     /* This function can be interrupted in three different places where it
+@@ -1443,6 +1447,7 @@
+        and second phases on the next call and resume sending.
+     */
+ 
++again:
+     switch(sftp->read_state) {
+     case libssh2_NB_state_idle:
+         sftp->last_errno = LIBSSH2_FX_OK;
+@@ -1538,8 +1543,8 @@
+             uint32_t size = (uint32_t)count;
+             if(size < buffer_size)
+                 size = (uint32_t)buffer_size;
+-            if(size > MAX_SFTP_READ_SIZE)
+-                size = MAX_SFTP_READ_SIZE;
++            if(size > filep->read_size)
++                size = (uint32_t)filep->read_size;
+ 
+             chunk = LIBSSH2_ALLOC(session, packet_len +
+                                   sizeof(struct sftp_pipeline_chunk));
+@@ -1686,6 +1691,9 @@
+                 LIBSSH2_FREE(session, data);
+ 
+                 if(rc32 == LIBSSH2_FX_EOF) {
++                    /* a short read just before was the end of the file,
++                       not a limit of the server */
++                    filep->short_read = 0;
+                     filep->eof = TRUE;
+                     return bytes_in_buffer;
+                 }
+@@ -1719,11 +1727,24 @@
+                                           "FXP_READ response too big");
+                 }
+ 
++                if(filep->short_read && rc32 > 0) {
++                    /* the file went on after a short read: the server does
++                       not give more than that in one reply */
++                    if(filep->short_read >= 1024 &&
++                       filep->short_read < filep->read_size)
++                        filep->read_size = filep->short_read;
++                    filep->short_read = 0;
++                }
++
+                 if(rc32 != chunk->len) {
+                     /* a short read does not imply end of file, but we must
+                        adjust the offset_sent since it was advanced with a
+                        full chunk->len before */
+                     filep->offset_sent -= (chunk->len - rc32);
++                    /* the requests sent after this one ask for the wrong
++                       offsets now: they are dropped below and asked for
++                       again from where this reply ends */
++                    short_read = rc32 ? rc32 : 1;
+                 }
+ 
+                 if((bytes_in_buffer + rc32) > buffer_size) {
+@@ -1758,6 +1779,26 @@
+                 _libssh2_list_remove(&chunk->node);
+                 LIBSSH2_FREE(session, chunk);
+ 
++                if(short_read) {
++                    /* drop the requests sent after the short reply (their
++                       answers are ignored when they come) and go on from
++                       where it ended, with new requests */
++                    sftp_packetlist_flush(handle);
++                    filep->offset_sent = filep->offset + filep->data_left;
++                    filep->short_read = short_read;
++                    if(bytes_in_buffer > 0)
++                        return bytes_in_buffer;
++                    if(short_read == 1)
++                        /* an empty reply that is not the end of the file:
++                           asking again could go on forever */
++                        return _libssh2_error(session,
++                                              LIBSSH2_ERROR_SFTP_PROTOCOL,
++                                              "Empty FXP_READ response");
++                    short_read = 0;
++                    sftp->read_state = libssh2_NB_state_idle;
++                    goto again;
++                }
++
+                 /* check if we have space left in the buffer
+                  * and either continue to the next chunk or stop
+                  */
+@@ -2560,6 +2601,23 @@
+ 
+     /* reset EOF to False */
+     handle->u.file.eof = FALSE;
++    handle->u.file.short_read = 0;
++}
++
++/* libssh2_sftp_set_read_size
++ * The size of each FXP_READ request for files opened from now on.
++ */
++LIBSSH2_API size_t
++libssh2_sftp_set_read_size(LIBSSH2_SFTP *sftp, size_t size)
++{
++    if(!sftp)
++        return 0;
++    if(size < 1024)
++        size = 1024;
++    if(size > MAX_SFTP_READ_SIZE_LIMIT)
++        size = MAX_SFTP_READ_SIZE_LIMIT;
++    sftp->read_size = size;
++    return size;
+ }
+ 
+ /* libssh2_sftp_seek

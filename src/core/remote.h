@@ -41,6 +41,9 @@ typedef struct {
 	const char *known_hosts;
 	int connect_timeout_ms;
 	int io_timeout_ms;
+	/* SFTP: the ciphers to offer, in order (libssh2 names, comma separated),
+	 * NULL = libssh2's default */
+	const char *ciphers;
 } remote_env;
 
 /* Why a connection failed. */

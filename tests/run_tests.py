@@ -28,7 +28,11 @@ DATA = {
     "FTP": os.path.join(ROOT, "testserver", "ftp-data"),
     "SFTP": os.path.join(ROOT, "testserver", "sftp-data"),
     "OTP": os.path.join(ROOT, "testserver", "otp-data"),
+    "CAP": os.path.join(ROOT, "testserver", "cap-data", "data"),
 }
+# sftph-cap: OpenSSH whose read replies are cut to the cap in this file
+CAP_FILE = os.path.join(ROOT, "testserver", "cap-data", "cap", "cap")
+CAP_SITE = '  <site name="Cap" protocol="sftp" host="127.0.0.1" port="2224" user="test" password="test123" folder="data"/>\n'
 # the two-factor server (testserver/otp): its users and the code maker
 KEY = os.path.join(ROOT, "testserver", "keys", "client_ed25519")
 OTP_SITES = f"""  <site name="Code" protocol="sftp" host="127.0.0.1" port="2223" user="otp" password="{{otp_pw}}" folder="data"/>
@@ -770,6 +774,93 @@ def t_ftp_cut_two_replies():
     zita_cut_reads("two-late")
 
 
+# --- SFTP: ciphers and short read replies (testserver/cap) -------------------
+
+CIPHERS = ["chacha20-poly1305@openssh.com", "aes128-ctr", "aes192-ctr", "aes256-ctr",
+           "aes128-gcm@openssh.com", "aes256-gcm@openssh.com", "aes128-cbc", "aes256-cbc"]
+
+
+def set_cap(n):
+    with open(CAP_FILE, "w") as f:
+        f.write(str(n))
+
+
+def check_reads(d, name, data, rnd):
+    """the file in many ways: whole, in pieces, at random offsets, end first"""
+    p = os.path.join(d, name)
+    assert read(p) == data, (name, "whole")
+    for piece in (4096, 65536, 1024 * 1024):
+        got = bytearray()
+        with open(p, "rb") as f:
+            while True:
+                b = f.read(piece)
+                if not b:
+                    break
+                got += b
+        assert bytes(got) == data, (name, "pieces", piece)
+    with open(p, "rb") as f:
+        for _ in range(40):
+            off = rnd.randrange(0, len(data) + 1)
+            n = rnd.choice([1, 100, 4096, 30000, 70000, 300000])
+            f.seek(off)
+            assert f.read(n) == data[off:off + n], (name, "at", off, n)
+        # the end first, then from the start (how archive tools read)
+        f.seek(max(0, len(data) - 100))
+        assert f.read() == data[max(0, len(data) - 100):], (name, "tail")
+        f.seek(0)
+        assert f.read() == data, (name, "after tail")
+
+
+def cap_files(sizes, rnd):
+    files = {}
+    for n in sizes:
+        name = f"f{n}.bin"
+        data = rnd.randbytes(n)
+        write(os.path.join(DATA["CAP"], name), data)
+        files[name] = data
+    return files
+
+
+def t_sftp_ciphers():
+    # every cipher family, with whole-packet decryption (libssh2 patch 1):
+    # writes and reads must give back the same bytes
+    rnd = random.Random(2734)
+    set_cap(0)
+    write_sites(extra=CAP_SITE)
+    files = cap_files([0, 1, 15, 16, 17, 32767, 1024 * 1024 + 13], rnd)
+    for c in CIPHERS:
+        pos = log_pos()
+        with Mount(args=["--ciphers", c]):
+            d = os.path.join(MNT, "Cap")
+            for name, data in files.items():
+                check_reads(d, name, data, rnd)
+            up = rnd.randbytes(700001)
+            write(os.path.join(d, "up.bin"), up)
+            assert read(os.path.join(DATA["CAP"], "up.bin")) == up, c
+            assert read(os.path.join(d, "up.bin")) == up, c
+        assert f"cipher {c}," in log_since(pos), c
+
+
+def t_sftp_short_reads():
+    # a server that gives at most CAP bytes per read reply: with 255 KB read
+    # requests and read-ahead, libssh2 1.11.1 failed with "Read Packet At
+    # Unexpected Offset" (patch 2 asks again from where the reply ended)
+    rnd = random.Random(2735)
+    write_sites(extra=CAP_SITE)
+    try:
+        for cap in (20000, 65536, 100000):
+            set_cap(cap)
+            files = cap_files([0, 1, cap - 1, cap, cap + 1, 255 * 1024, 255 * 1024 + 1,
+                               3 * 1024 * 1024 + 7], rnd)
+            for c in ("chacha20-poly1305@openssh.com", "aes128-ctr"):
+                with Mount(args=["--ciphers", c]):
+                    d = os.path.join(MNT, "Cap")
+                    for name, data in files.items():
+                        check_reads(d, name, data, rnd)
+    finally:
+        set_cap(0)
+
+
 ZITA_TESTS = [t_ftp_data_ports_busy, t_ftp_data_ports_gone, t_ftp_max_clients,
               t_ftp_cut_no_reply, t_ftp_cut_two_replies]
 
@@ -838,7 +929,8 @@ def main():
             except Exception as e:
                 print(f"FAIL {t.__name__}: {e!r}")
                 failed += 1
-    for t in [t_password_requester, t_hostkey, t_offline, t_readonly] + ZITA_TESTS + OTP_TESTS:
+    for t in [t_password_requester, t_hostkey, t_offline, t_readonly, t_sftp_ciphers,
+              t_sftp_short_reads] + ZITA_TESTS + OTP_TESTS:
         if only and only not in t.__name__:
             continue
         try:

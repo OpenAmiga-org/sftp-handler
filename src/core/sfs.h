@@ -31,6 +31,7 @@ typedef struct {
 	                           * (two-factor); 0 = kept until the handler stops */
 	int         connect_timeout_ms;
 	int         io_timeout_ms;
+	const char *ciphers;      /* SFTP: cipher order (libssh2 names, commas), NULL = default */
 	int         readonly;     /* refuse all changes */
 } sfs_options;
 

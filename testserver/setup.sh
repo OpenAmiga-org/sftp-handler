@@ -22,7 +22,7 @@ mkdir -p sftp-data ftp-data otp-data keys
 mkdir -p keys/authorized
 cp keys/client_ed25519.pub keys/authorized/authorized_keys
 
-docker rm -f sftph-sftp sftph-ftp sftph-otp >/dev/null 2>&1 || true
+docker rm -f sftph-sftp sftph-ftp sftph-otp sftph-cap >/dev/null 2>&1 || true
 
 docker run -d --name sftph-sftp -p 2222:22 \
 	-v "$PWD/keys/ssh_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key:ro" \
@@ -45,6 +45,18 @@ docker run -d --name sftph-otp -p 2223:22 \
 	-v "$PWD/keys/client_ed25519.pub:/etc/ssh/authorized_keys:ro" \
 	-v "$PWD/otp-data:/srv/data" \
 	sftph-otp > /dev/null
+
+# short read replies (the cap in cap-data/cap/cap) and the CBC ciphers
+mkdir -p cap-data/data cap-data/cap
+docker build -q -t sftph-cap --build-arg UID="$(id -u)" --build-arg GID="$(id -g)" cap > /dev/null
+docker run -d --name sftph-cap -p 2224:22 \
+	-v "$PWD/keys/ssh_host_ed25519_key:/etc/ssh/ssh_host_ed25519_key:ro" \
+	-v "$PWD/keys/ssh_host_rsa_key:/etc/ssh/ssh_host_rsa_key:ro" \
+	-v "$PWD/keys/ssh_host_ed25519_key.pub:/etc/ssh/ssh_host_ed25519_key.pub:ro" \
+	-v "$PWD/keys/ssh_host_rsa_key.pub:/etc/ssh/ssh_host_rsa_key.pub:ro" \
+	-v "$PWD/cap-data/data:/srv/data" \
+	-v "$PWD/cap-data/cap:/srv/cap:ro" \
+	sftph-cap > /dev/null
 
 sleep 2
 docker ps --filter name=sftph- --format '{{.Names}}  {{.Status}}  {{.Ports}}'

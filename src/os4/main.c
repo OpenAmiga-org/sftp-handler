@@ -166,11 +166,11 @@ int32 sfh_entry(STRPTR args, int32 arglen, struct Library *sysbase)
 
 static const char template[] =
 	"VOLUME/K,CONFIGDIR/K,CACHETIME/K/N,IDLETIME/K/N,TIMEOUT/K/N,"
-	"TEMPDIR/K,KEEPDIR/K,NOICONS/S,READONLY/S,CHARSET/K,DEBUG/S,CODEIDLETIME/K/N";
+	"TEMPDIR/K,KEEPDIR/K,NOICONS/S,READONLY/S,CHARSET/K,DEBUG/S,CODEIDLETIME/K/N,CIPHERS/K";
 
 enum {
 	A_VOLUME, A_CONFIGDIR, A_CACHETIME, A_IDLETIME, A_TIMEOUT,
-	A_TEMPDIR, A_KEEPDIR, A_NOICONS, A_READONLY, A_CHARSET, A_DEBUG, A_CODEIDLETIME, A_COUNT
+	A_TEMPDIR, A_KEEPDIR, A_NOICONS, A_READONLY, A_CHARSET, A_DEBUG, A_CODEIDLETIME, A_CIPHERS, A_COUNT
 };
 
 static struct {
@@ -180,6 +180,7 @@ static struct {
 	char         config_dir[256];
 	char         save_dir[256];
 	char         known_hosts[300];
+	char         ciphers[300];     /* CIPHERS=, "" = libssh2's order */
 	char         tempdir[256];
 	char         keepdir[256];
 	int          readonly;
@@ -535,11 +536,13 @@ static int handler_main(struct DosPacket *pkt)
 	snprintf(g.known_hosts, sizeof(g.known_hosts), "%s/%s", g.save_dir, CFG_KNOWNHOSTS);
 	snprintf(g.tempdir, sizeof(g.tempdir), "%s", args[A_TEMPDIR] ? (const char *)args[A_TEMPDIR] : "T:");
 	snprintf(g.keepdir, sizeof(g.keepdir), "%s", args[A_KEEPDIR] ? (const char *)args[A_KEEPDIR] : g.tempdir);
+	snprintf(g.ciphers, sizeof(g.ciphers), "%s", args[A_CIPHERS] ? (const char *)args[A_CIPHERS] : "");
 
 	memset(&g.fo, 0, sizeof(g.fo));
 	g.fo.config_dir = g.config_dir;
 	g.fo.save_dir = strcmp(g.save_dir, g.config_dir) != 0 ? g.save_dir : NULL;
 	g.fo.known_hosts = g.known_hosts;
+	g.fo.ciphers = g.ciphers[0] != '\0' ? g.ciphers : NULL;
 	g.fo.icon_file = noicons ? NULL : "ENV:Sys/def_drawer.info";
 	g.fo.tempdir = g.tempdir;
 	g.fo.keepdir = g.keepdir;

@@ -610,6 +610,7 @@ static int need_remote(sfs *fs, site *s)
 	env.known_hosts = fs->opt.known_hosts;
 	env.connect_timeout_ms = fs->opt.connect_timeout_ms;
 	env.io_timeout_ms = fs->opt.io_timeout_ms;
+	env.ciphers = fs->opt.ciphers;
 	/* a password is needed first unless the site has one, logs in
 	 * anonymously (FTP) or with a key file (SFTP) */
 	ask_first = s->cfg.user[0] != '\0' && s->cfg.password[0] == '\0' &&

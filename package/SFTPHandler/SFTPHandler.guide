@@ -168,6 +168,7 @@ The DOSDriver (DEVS:DOSDrivers/SFTP) can have a Startup line, for example
 @{b}CACHETIME=seconds@{ub}   how long a folder listing from a server is used before it is fetched again (default 5).
 @{b}IDLETIME=seconds@{ub}    a connection unused this long is closed (default 300). It is made again when needed.
 @{b}CODEIDLETIME=seconds@{ub} the same for a connection whose login needed a code (default 0: it is kept open). See @{"Two-factor logins" link TwoFactor}.
+@{b}CIPHERS=list@{ub}        SFTP: the ciphers to offer, in this order, separated by commas, for example CIPHERS=aes128-ctr,chacha20-poly1305@openssh.com. Normally not needed: without it the server picks from all, usually chacha20-poly1305, which is also the fastest on Amiga processors. DEBUG shows which cipher a connection uses.
 @{b}TIMEOUT=seconds@{ub}     how long to wait for a server's answer (default 60).
 @{b}TEMPDIR=drawer@{ub}      where FTP uploads are put together (default T:). See @{"Limits" link Limits}.
 @{b}KEEPDIR=drawer@{ub}      where a file is kept when its upload failed (default: TEMPDIR).
@@ -243,6 +244,12 @@ sites.xml is plain XML (UTF-8):
 
 @node History "History"
 @{b}History@{ub}
+
+@{b}0.15 (18.11.2026)@{ub}
+ - SFTP downloads are faster: one read request asks for 255 KB instead of 30000 bytes, so far fewer requests have to be encrypted and sent (in the test system 14.2-14.6 instead of 9.6-13.1 MB/s).
+ - SFTP with AES ciphers (servers that do not offer chacha20-poly1305): downloads about 2.7 times as fast, as the data of a packet is now decrypted in one go instead of 16 bytes at a time.
+ - Servers that give less than asked for in one read reply work: before, a download from such a server could fail.
+ - New DOSDriver option CIPHERS.
 
 @{b}0.14 (18.11.2026)@{ub}
  - FTP: big folders on ZitaFTP Server no longer end in "No disk present". Workbench reads only the start of each file, so most downloads are cut short. ZitaFTP often sent no reply for that (the handler waited 5 seconds and logged in again, for every such file) and sometimes one reply too many (the handler then took each reply for the answer to the next command, and every file failed). Cut downloads now end with ABOR, and late replies are dropped.

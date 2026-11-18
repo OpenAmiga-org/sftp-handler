@@ -38,6 +38,7 @@ typedef struct {
 #define RA_MIN   (32 * 1024)     /* first read-ahead block */
 #define RA_MAX   (512 * 1024)    /* largest; libssh2 asks for 4x ahead */
 #define WB_SIZE  (1024 * 1024)   /* write-behind buffer */
+#define SFTP_READ_SIZE (255 * 1024) /* per read request (OpenSSH's limit) */
 
 /* libssh2 counts its timeout from the start of a call, so a login's
  * questions get this much more for the user to answer (servers give up
@@ -1083,7 +1084,20 @@ int sftp_connect(const site_cfg *site, const char *password, const remote_env *e
 	}
 	libssh2_session_set_blocking(sr->ss, 1);
 	libssh2_session_set_timeout(sr->ss, env->io_timeout_ms);
+	if (env->ciphers != NULL && env->ciphers[0] != '\0' &&
+	    (libssh2_session_method_pref(sr->ss, LIBSSH2_METHOD_CRYPT_CS, env->ciphers) != 0 ||
+	     libssh2_session_method_pref(sr->ss, LIBSSH2_METHOD_CRYPT_SC, env->ciphers) != 0)) {
+		snprintf(err, errlen, "None of the ciphers \"%s\" is known.", env->ciphers);
+		*fail = RFAIL_PROTOCOL;
+		rc = -EINVAL;
+		goto fail;
+	}
 	rc = libssh2_session_handshake(sr->ss, sr->sock);
+	if (rc == 0)
+		plat_log(LOG_INFO, "sftp %s: kex %s, cipher %s, mac %s\n", site->name,
+		         libssh2_session_methods(sr->ss, LIBSSH2_METHOD_KEX),
+		         libssh2_session_methods(sr->ss, LIBSSH2_METHOD_CRYPT_SC),
+		         libssh2_session_methods(sr->ss, LIBSSH2_METHOD_MAC_SC));
 	if (rc != 0) {
 		libssh2_session_last_error(sr->ss, &msg, NULL, 0);
 		if (rc == LIBSSH2_ERROR_TIMEOUT || rc == LIBSSH2_ERROR_SOCKET_RECV ||
@@ -1117,6 +1131,12 @@ int sftp_connect(const site_cfg *site, const char *password, const remote_env *e
 		rc = -EPROTO;
 		goto fail;
 	}
+#ifdef LIBSSH2_SFTP_HAVE_READ_SIZE
+	/* bigger read requests (our libssh2 patch): one request and reply per
+	 * 255 KB instead of per 30000 bytes; a server that gives less in one
+	 * reply makes libssh2 ask for less */
+	libssh2_sftp_set_read_size(sr->sftp, SFTP_READ_SIZE);
+#endif
 	/* the site folder */
 	rc = libssh2_sftp_realpath(sr->sftp, site->folder[0] != '\0' ? site->folder : ".",
 	                           path, sizeof(path) - 1);

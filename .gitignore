@@ -9,3 +9,4 @@
 *.debug
 __pycache__/
 /testserver/otp-data/
+/testserver/cap-data/

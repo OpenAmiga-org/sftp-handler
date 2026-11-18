@@ -60,6 +60,11 @@ add your sites. SFTPHandler.guide has all the details.
 
 History:
 
+- 0.15 (2026-11-18): faster SFTP downloads: each read request asks for
+  255 KB instead of 30000 bytes, and with AES ciphers (servers without
+  chacha20-poly1305) a packet is decrypted in one go instead of 16 bytes
+  at a time (about 2.7 times as fast). Servers that give less than asked
+  for in one read reply work now. New DOSDriver option CIPHERS.
 - 0.14 (2026-11-18): FTP: big folders on ZitaFTP Server no longer end in
   "No disk present", and open much faster. Workbench reads only the start
   of each file; ZitaFTP often sent no reply for such a cut download (the

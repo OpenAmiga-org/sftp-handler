@@ -13,7 +13,10 @@ CORE_HDR  = $(wildcard src/core/*.h)
 CC        ?= gcc
 CFLAGS    ?= -O2 -g
 WARN       = -Wall -Wextra -Werror -Wno-format-truncation -std=gnu11
-PKGS       = fuse3 libssh2 expat
+PKGS       = fuse3 expat
+# the same patched libssh2 as the AmigaOS build (tools/libssh2-patches)
+SSH2       = build/deps/libssh2-linux
+SSH2_LIB   = $(SSH2)/lib/libssh2.a
 
 .PHONY: all linux os4 test unit lha clean
 
@@ -21,11 +24,14 @@ all: linux
 
 linux: build/linux/sftph-fuse
 
-build/linux/sftph-fuse: $(CORE_SRC) $(CORE_HDR) src/linux/main.c src/linux/platform_linux.c
+$(SSH2_LIB): $(wildcard tools/libssh2-patches/*.patch) tools/build_deps_linux.sh
+	./tools/build_deps_linux.sh
+
+build/linux/sftph-fuse: $(CORE_SRC) $(CORE_HDR) src/linux/main.c src/linux/platform_linux.c $(SSH2_LIB)
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) $(WARN) -Isrc/core $(shell pkg-config --cflags $(PKGS)) \
+	$(CC) $(CFLAGS) $(WARN) -Isrc/core -I$(SSH2)/include $(shell pkg-config --cflags $(PKGS)) \
 		-o $@ $(CORE_SRC) src/linux/main.c src/linux/platform_linux.c \
-		$(shell pkg-config --libs $(PKGS))
+		$(SSH2_LIB) -lssl -lcrypto $(shell pkg-config --libs $(PKGS))
 
 build/unit/unit_tests: tests/unit_tests.c src/core/ftplist.c src/core/config.c src/core/util.c src/core/charset.c $(CORE_HDR)
 	@mkdir -p $(dir $@)

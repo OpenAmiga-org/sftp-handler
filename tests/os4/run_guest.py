@@ -4,6 +4,9 @@ Docker servers, and checks the copied files by SHA-256.
 
     tests/os4/run_guest.py [--no-mount]
 
+SFH_HANDLER: another handler build to test; SFH_STARTUP: more DOSDriver
+options (for example "CIPHERS=aes128-ctr DEBUG").
+
 Uploads build/os4/sftp-handler, a site list for 10.0.2.2 and a DOSDriver
 to RAM:sftph, mounts SFTP: (CONFIGDIR=RAM:sftph/cfg), runs
 tests/os4/functional.script on both sites. clib4.library 2.5 must be
@@ -31,7 +34,7 @@ DOSDRIVER = """Handler   = RAM:sftph/{handler}
 StackSize = 262144
 Priority  = 5
 GlobVec   = -1
-Startup   = "CONFIGDIR=RAM:sftph/cfg"
+Startup   = "CONFIGDIR=RAM:sftph/cfg{extra}"
 """
 CLIB4 = os.path.expanduser("~/build/os4-downloads/clib4-2.5/clib4/clib4.library")
 DATA = {"Docker SFTP": "testserver/sftp-data", "Docker FTP": "testserver/ftp-data"}
@@ -61,7 +64,7 @@ async def setup(fleet, m, mount=True):
     handler = f"sftp-handler.{rev}.{os.getpid()}"
     hostkey = open(os.path.join(ROOT, "testserver", "keys", "ssh_host_ed25519_key.pub")).read().split()
     known = f"[10.0.2.2]:2222 {hostkey[0]} {hostkey[1]}\n"
-    for name, text in (("sites.xml", SITES), ("SFTP", DOSDRIVER.format(handler=handler)),
+    for name, text in (("sites.xml", SITES), ("SFTP", DOSDRIVER.format(handler=handler, extra=(" " + os.environ["SFH_STARTUP"]) if os.environ.get("SFH_STARTUP") else "")),
                        ("known_hosts", known)):
         with open(os.path.join(work, name), "w") as f:
             f.write(text)
