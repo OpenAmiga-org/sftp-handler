@@ -60,6 +60,11 @@ add your sites. SFTPHandler.guide has all the details.
 
 History:
 
+- 0.12 (2026-11-18): FTP: when the server has no data connection free
+  ("425 cannot open data connection", for example ZitaFTP Server after
+  many quick transfers), the handler waits and asks again instead of
+  failing with "No disk present". Workbench reads the start of every file
+  of a folder it opens, so a big folder needs many data connections.
 - 0.11 (2026-11-17): SFTP two-factor logins (first in the 0.10 beta): the
   server's questions (such as "Verification code:") are asked with a
   requester, logins in two steps (key and code, key and password) work,

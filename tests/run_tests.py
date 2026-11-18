@@ -11,6 +11,7 @@ import hashlib
 import os
 import random
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -640,6 +641,95 @@ def t_2fa_server_restart():
     assert "connection to the server was closed" in q[1], q
 
 
+# --- an FTP server like ZitaFTP Server (testserver/zitasim.py) --------------
+
+ZITA = os.path.join(ROOT, "testserver", "zitasim.py")
+ZITA_DATA = os.path.join(WORK, "zita-data")
+ZITA_SITE = '  <site name="Zita" protocol="ftp" host="127.0.0.1" port="2124" user="test" password="test123"/>\n'
+
+
+class Zita:
+    """testserver/zitasim.py on port 2124 with ZITA_DATA as its files"""
+
+    def __init__(self, *args):
+        self.args = list(args)
+
+    def __enter__(self):
+        os.makedirs(ZITA_DATA, exist_ok=True)
+        self.log = open(os.path.join(WORK, "zitasim.log"), "a")
+        self.proc = subprocess.Popen([sys.executable, "-I", ZITA, ZITA_DATA, "--port", "2124"] + self.args,
+                                     stdin=subprocess.DEVNULL, stdout=self.log, stderr=self.log)
+        for _ in range(100):
+            try:
+                socket.create_connection(("127.0.0.1", 2124), timeout=1).close()
+                break
+            except OSError:
+                time.sleep(0.05)
+        write_sites(extra=ZITA_SITE)
+        return self
+
+    def __exit__(self, *a):
+        self.proc.terminate()
+        self.proc.wait(timeout=10)
+        self.log.close()
+        write_sites()
+        shutil.rmtree(ZITA_DATA, ignore_errors=True)
+
+
+def zita_files(n, size=5000):
+    os.makedirs(os.path.join(ZITA_DATA, "many"), exist_ok=True)
+    for i in range(n):
+        write(os.path.join(ZITA_DATA, "many", f"file{i:03d}.lha"), bytes([i % 256]) * size)
+
+
+def t_ftp_data_ports_busy():
+    # Workbench reads the start of every file of a folder it opens: one
+    # data connection each. When the server's data ports are used up it
+    # answers 425; the handler waits for a free one instead of failing
+    # (it was "No disk present" on AmigaOS)
+    zita_files(12)
+    pos = log_pos()
+    with Zita("--data-ports", "22000:3", "--port-hold", "1.5"), Mount():
+        d = os.path.join(MNT, "Zita", "many")
+        for n in sorted(os.listdir(d)):
+            with open(os.path.join(d, n), "rb") as f:
+                assert len(f.read(480)) == 480, n
+        assert read(os.path.join(d, "file011.lha")) == bytes([11]) * 5000
+    assert "no data connection free (425), waiting" in log_since(pos)
+
+
+def t_ftp_data_ports_gone():
+    # a server that stays without data ports: "busy" after the I/O timeout,
+    # not an I/O error
+    zita_files(2)
+    with Zita("--data-ports", "22000:2", "--port-hold", "600"), Mount(args=["--timeout-ms", "3000"]):
+        d = os.path.join(MNT, "Zita", "many")
+        names = sorted(os.listdir(d))   # the two listings take both ports
+        t = time.time()
+        expect_errno(errno.EBUSY, read, os.path.join(d, names[0]))
+        assert 2 < time.time() - t < 10, time.time() - t
+
+
+def t_ftp_max_clients():
+    # "421 max clients exceeded": fewer connections; three files read at
+    # the same time still come out whole
+    zita_files(3, 300000)
+    with Zita("--max-clients", "2"), Mount():
+        d = os.path.join(MNT, "Zita", "many")
+        fs = [open(os.path.join(d, f"file{i:03d}.lha"), "rb") for i in range(3)]
+        got = [b"", b"", b""]
+        while any(len(g) < 300000 for g in got):
+            for i in range(3):
+                got[i] += fs[i].read(65536)
+        for f in fs:
+            f.close()
+        for i in range(3):
+            assert got[i] == bytes([i]) * 300000, i
+
+
+ZITA_TESTS = [t_ftp_data_ports_busy, t_ftp_data_ports_gone, t_ftp_max_clients]
+
+
 OTP_TESTS = [t_2fa_code, t_2fa_key_then_code, t_2fa_key_then_password,
              t_2fa_password_asked_first, t_2fa_slow_answer, t_2fa_wrong_code, t_2fa_wrong_password,
              t_2fa_cancel, t_2fa_kept_open, t_2fa_server_restart]
@@ -704,7 +794,7 @@ def main():
             except Exception as e:
                 print(f"FAIL {t.__name__}: {e!r}")
                 failed += 1
-    for t in [t_password_requester, t_hostkey, t_offline, t_readonly] + OTP_TESTS:
+    for t in [t_password_requester, t_hostkey, t_offline, t_readonly] + ZITA_TESTS + OTP_TESTS:
         if only and only not in t.__name__:
             continue
         try:

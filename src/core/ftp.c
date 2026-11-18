@@ -456,7 +456,11 @@ static void put_conn(ftp_conn *c)
 
 /* --- paths and data connections ------------------------------------------- */
 
-static int open_data(ftp_remote *fr, ftp_conn *c)
+/* One try for a data connection. -EBUSY: the server has no data port free
+ * right now ("425 cannot open data connection": ZitaFTP Server, for one,
+ * gives each data connection a port from a fixed range, and a port stays
+ * busy for a while after its connection closed). */
+static int open_data_once(ftp_remote *fr, ftp_conn *c)
 {
 	int code, port = -1;
 	char *p;
@@ -465,6 +469,8 @@ static int open_data(ftp_remote *fr, ftp_conn *c)
 		code = cmd(fr, c, "EPSV");
 		if (code < 0)
 			return code;
+		if (code == 425)
+			return -EBUSY;   /* PASV would get the same */
 		if (code == 229 && (p = strstr(c->reply.data, "(|||")) != NULL) {
 			port = atoi(p + 4);
 			fr->epsv = 1;
@@ -478,6 +484,8 @@ static int open_data(ftp_remote *fr, ftp_conn *c)
 		code = cmd(fr, c, "PASV");
 		if (code < 0)
 			return code;
+		if (code == 425)
+			return -EBUSY;
 		p = strchr(c->reply.data, '(');
 		if (code != 227 || p == NULL ||
 		    sscanf(p + 1, "%d,%d,%d,%d,%d,%d", &h[0], &h[1], &h[2], &h[3], &p1, &p2) != 6) {
@@ -495,6 +503,40 @@ static int open_data(ftp_remote *fr, ftp_conn *c)
 	/* the address in a PASV reply is often wrong behind NAT: always use
 	 * the address of the control connection */
 	return net_connect_addr(c->addr, port, fr->env.connect_timeout_ms);
+}
+
+/* A data connection; while the server has no data port free, waits (up
+ * to the I/O timeout) and asks again. Workbench reads the start of every
+ * file in a folder it opens, so a big folder means many data connections
+ * in a short time. -EBUSY ("Object in use") when the server stays busy. */
+static int open_data(ftp_remote *fr, ftp_conn *c)
+{
+	int64_t start = plat_ms();
+	int delay = 100, waited = 0, rc;
+
+	for (;;) {
+		int64_t left;
+
+		rc = open_data_once(fr, c);
+		if (rc != -EBUSY)
+			break;
+		left = fr->env.io_timeout_ms - (plat_ms() - start);
+		if (left <= 0) {
+			plat_log(LOG_ERR, "ftp %s: the server has no data connection free (425) for %d s\n",
+			         fr->site.name, (int)((plat_ms() - start) / 1000));
+			break;
+		}
+		if (!waited)
+			plat_log(LOG_INFO, "ftp %s: no data connection free (425), waiting\n", fr->site.name);
+		waited = 1;
+		plat_sleep_ms(delay < left ? delay : (int)left);
+		if (delay < 2000)
+			delay *= 2;
+	}
+	if (waited && rc >= 0)
+		plat_log(LOG_INFO, "ftp %s: data connection after %d ms\n", fr->site.name,
+		         (int)(plat_ms() - start));
+	return rc;
 }
 
 static char *server_path(ftp_remote *fr, const char *path)

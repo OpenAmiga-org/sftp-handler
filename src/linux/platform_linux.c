@@ -3,6 +3,8 @@
 #define _GNU_SOURCE
 #include "platform.h"
 
+#include <time.h>
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
@@ -99,6 +101,15 @@ int64_t plat_ms(void)
 
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+void plat_sleep_ms(int ms)
+{
+	struct timespec ts;
+
+	ts.tv_sec = ms / 1000;
+	ts.tv_nsec = (long)(ms % 1000) * 1000000;
+	nanosleep(&ts, NULL);
 }
 
 void plat_log(int level, const char *fmt, ...)

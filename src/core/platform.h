@@ -24,6 +24,7 @@ void    tmpf_close(tmpf *f);                            /* deletes the file */
 /* Wall clock (UTC seconds since 1970) and a monotonic millisecond clock. */
 time_t  plat_time(void);
 int64_t plat_ms(void);
+void    plat_sleep_ms(int ms);                         /* waits ms milliseconds */
 
 enum { LOG_ERR = 0, LOG_INFO = 1, LOG_DEBUG = 2 };
 extern int plat_loglevel;

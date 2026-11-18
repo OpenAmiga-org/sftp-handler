@@ -203,6 +203,15 @@ int64_t plat_ms(void)
 	return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+void plat_sleep_ms(int ms)
+{
+	struct timespec ts;
+
+	ts.tv_sec = ms / 1000;
+	ts.tv_nsec = (long)(ms % 1000) * 1000000;
+	nanosleep(&ts, NULL);
+}
+
 void plat_log(int level, const char *fmt, ...)
 {
 	char buf[600];

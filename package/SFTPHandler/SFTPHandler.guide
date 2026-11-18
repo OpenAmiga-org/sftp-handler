@@ -215,6 +215,9 @@ Use the newest code and type it quickly. Codes from an authenticator app depend 
 @{b}FTP folders stay empty or listing fails@{ub}
 The handler uses passive mode with the server's address of the control connection. A firewall that blocks the passive data ports stops listings and transfers.
 
+@{b}FTP: big folders fill slowly@{ub}
+Workbench reads the start of every file in a folder it opens, to choose its icon. Over FTP each of these reads needs a data connection of its own. Some servers (ZitaFTP Server, for one) give data connections a port from a small range, and a port stays busy for a while after use: when all are taken, the server answers "425 cannot open data connection". The handler then waits for a free one (up to the TIMEOUT) and asks again. A bigger data port range in the server's settings makes such folders open faster. A file that still gets no data connection reports "Object in use".
+
 @{b}More detail@{ub}
 Add DEBUG to the Startup line (see @{"DOSDriver options" link Options}), mount again and read the output with DumpDebugBuffer.
 @endnode
@@ -240,6 +243,9 @@ sites.xml is plain XML (UTF-8):
 
 @node History "History"
 @{b}History@{ub}
+
+@{b}0.12 (18.11.2026)@{ub}
+ - FTP: when the server has no data connection free ("425 cannot open data connection", for example ZitaFTP Server after many quick transfers), the handler waits and asks again instead of failing with "No disk present". Workbench reads the start of every file of a folder it opens, so a big folder needs many data connections in a short time.
 
 @{b}0.11 (17.11.2026)@{ub}
  - SFTP two-factor logins, first in the 0.10 beta: see @{"Two-factor logins" link TwoFactor}.
