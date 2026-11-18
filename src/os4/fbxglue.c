@@ -67,6 +67,8 @@ static int fbxerr(int err)
 		return -ENODEV;  /* "No disk present" */
 	case EBUSY:
 		return -ETXTBSY; /* "Object in use" */
+	case EFBIG:
+		return -ENOSPC;  /* "Disk is full" */
 	case EXDEV:          /* from one site to another */
 		return -NEWLIB_EOPNOTSUPP;
 	}
@@ -200,7 +202,7 @@ static int nc_open(const char *path, struct fuse_file_info *fi)
 	err = rpc_call(&r);
 	if (err == 0)
 		fi->fh = (long long)(uint32)r.fh;
-	return fbxerr(err);
+	return r.mode ? fbxerr_change(err) : fbxerr(err);
 }
 
 static int nc_create(const char *path, mode_t mode, struct fuse_file_info *fi)
@@ -248,7 +250,8 @@ static int fh_op(int op, const char *path, struct fuse_file_info *fi)
 
 	rpc_init(&r, op, path);
 	r.fh = FH(fi);
-	return fbxerr(rpc_call(&r));
+	/* flushing uploads what was written */
+	return op == OP_FLUSH ? fbxerr_change(rpc_call(&r)) : fbxerr(rpc_call(&r));
 }
 
 static int nc_flush(const char *path, struct fuse_file_info *fi)

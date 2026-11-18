@@ -19,7 +19,9 @@ Built on filesysbox.library, clib4, libssh2 and AmiSSL.
 - `src/prefs/`  sftphprefs (ReAction; "Test connection" uses the core's
                 FTP/SFTP code)
 - `src/linux/`  Linux FUSE build of the core, for fast tests
-- `tests/`      `unit_tests.c`, `run_tests.py` (Linux build against the
+- `tests/`      `os4/cryptobench.c`: how fast an Amiga decrypts with each
+                SSH cipher (libssh2's chacha20-poly1305, AmiSSL's AES and
+                HMACs); `unit_tests.c`, `run_tests.py` (Linux build against the
                 Docker servers), `os4/` (guest test tools)
 - `testserver/` throwaway FTP (vsftpd) and SFTP (OpenSSH) servers in Docker,
                 and `otp/`: OpenSSH with two-factor logins (TOTP codes from

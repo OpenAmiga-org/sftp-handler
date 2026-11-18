@@ -244,6 +244,9 @@ sites.xml is plain XML (UTF-8):
 @node History "History"
 @{b}History@{ub}
 
+@{b}0.13 (18.11.2026)@{ub}
+ - Clearer messages instead of "Error -1": a server that refuses to save a file now gives "file is write protected" (also when the file is opened or saved), and "file too large" gives "disk is full".
+
 @{b}0.12 (18.11.2026)@{ub}
  - FTP: when the server has no data connection free ("425 cannot open data connection", for example ZitaFTP Server after many quick transfers), the handler waits and asks again instead of failing with "No disk present". Workbench reads the start of every file of a folder it opens, so a big folder needs many data connections in a short time.
 
