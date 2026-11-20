@@ -11,6 +11,9 @@ sftphprefs.
 
 Built on filesysbox.library, clib4, libssh2 and AmiSSL.
 
+Download: [SFTPHandler on OS4Depot](https://os4depot.net/?function=showfile&file=driver/handler/sftphandler.lha)
+(test versions: [GitHub releases](https://github.com/orgin/sftp-handler/releases)).
+
 ## Layout
 
 - `src/core/`   portable C: site list (XML), FTP client, SFTP (libssh2),
@@ -34,7 +37,8 @@ Built on filesysbox.library, clib4, libssh2 and AmiSSL.
                 ciphers allowed, for the cipher and short-read tests
 - `package/`    release files: Install script, AmigaGuide, DOSDriver,
                 readme, icons (`icons/README.md`), third-party licences
-- `tools/`      build scripts, icon conversion (`make_icons.py`, `os4/mkicon.c`);
+- `tools/`      build scripts, icon conversion (`make_icons.py`, `os4/mkicon.c`),
+                `update_readme.py` (the changelog below, from the readme);
                 `libssh2-patches/`: our changes to libssh2 1.11.1, applied by
                 `build_deps_os4.sh` and `build_deps_linux.sh` (the Linux test
                 build links the same patched libssh2, built by the Makefile)
@@ -133,6 +137,18 @@ The OS4 build needs the cross-compiler image
 - chmod sends only the owner's r/w bits; group/other stay as they are.
 - filesysbox maps EACCES, EIO, EXDEV... to "Error -1"; the glue maps them
   to the nearest AmigaDOS errors.
+
+## Changelog
+
+<!-- changelog start: made by tools/update_readme.py from package/SFTPHandler.readme -->
+- **0.15** (2026-11-18): faster SFTP downloads: each read request asks for 255 KB instead of 30000 bytes, and with AES ciphers (servers without chacha20-poly1305) a packet is decrypted in one go instead of 16 bytes at a time (about 2.7 times as fast). Servers that give less than asked for in one read reply work now. New DOSDriver option CIPHERS.
+- **0.14** (2026-11-18): FTP: big folders on ZitaFTP Server no longer end in "No disk present", and open much faster. Workbench reads only the start of each file; ZitaFTP often sent no reply for such a cut download (the handler waited 5 seconds and logged in again) and sometimes one reply too many (the replies got out of step). Cut downloads now end with ABOR, and late replies are dropped.
+- **0.13** (2026-11-18): clearer messages instead of "Error -1": a server that refuses to save a file gives "file is write protected" (also when the file is opened or saved), "file too large" gives "disk is full".
+- **0.12** (2026-11-18): FTP: when the server has no data connection free ("425 cannot open data connection", for example ZitaFTP Server after many quick transfers), the handler waits and asks again instead of failing with "No disk present". Workbench reads the start of every file of a folder it opens, so a big folder needs many data connections.
+- **0.11** (2026-11-17): SFTP two-factor logins (first in the 0.10 beta): the server's questions (such as "Verification code:") are asked with a requester, logins in two steps (key and code, key and password) work, a connection that needed a code stays open while unused (DOSDriver option CODEIDLETIME). Works with AmiSSL 6 and with every AmiSSL 5 (5.1 or newer): 0.9 needed AmiSSL 5.27 and said "needs AmiSSL 5 or newer" with an older one such as 5.25 or with only AmiSSL 6. New icons in the AmigaOS 4.1 style, and a volume icon for SFTP: (Install copies it to ENVARC:Sys/def_SFTP.info).
+- **0.10 beta** (2026-11-17): BETA from the 2fa branch, not for OS4Depot. SFTP two-factor logins: the server's questions (such as "Verification code:") are asked with a requester, logins in two steps (key and code, key and password) work. A connection that needed a code stays open while unused (new DOSDriver option CODEIDLETIME). sftphprefs: Test connection asks the same questions.
+- **0.9** (2026-11-15): first release. Install can update an installation that is in use (it stops SFTP: and mounts it again).
+<!-- changelog end -->
 
 Public domain, see `UNLICENSE`. libssh2 is BSD licensed (its licence goes
 into the release archive).
