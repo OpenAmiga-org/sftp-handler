@@ -4,33 +4,30 @@ version: @VERSION@
 date: @DATE@
 author: Björn Hagström
 submitter: Björn Hagström
-email:
+email: orgin.org@gmail.com
 url: http://openamiga.org/?function=gitproject&name=sftp-handler
 category: driver/handler
 replaces:
 requirements: clib4.library 2.5, filesysbox.library 54.8, AmiSSL 5.1+ or 6 (SFTP)
 license: Public domain
 minosversion: 4.1
-texttype: Plain text
+texttype: Markdown
 distribute: yes
 hend:
 
-sftp-handler is a filesystem handler for AmigaOS 4. The device SFTP:
+# SFTPHandler @VERSION@ - FTP and SFTP sites as folders of a volume
+
+sftp-handler is a filesystem handler for AmigaOS 4. The device `SFTP:`
 shows each FTP and SFTP site you have set up as a folder, for example
-SFTP:My server. Inside it are the files on the server: Workbench, the
+`SFTP:My server`. Inside it are the files on the server: Workbench, the
 Shell and every program can open, copy, rename, delete and save them as
 on any other disk.
 
-sftp-handler is an OpenAmiga.org project. The source code, test versions
-and bug reports are at https://github.com/OpenAmiga-org/sftp-handler
+sftp-handler is an [OpenAmiga.org project](http://openamiga.org/?function=gitproject&name=sftp-handler).
+The source code, test versions and bug reports are at
+<https://github.com/OpenAmiga-org/sftp-handler>.
 
-The sites are kept with the prefs program sftphprefs (name, protocol,
-server, port, user, password, start folder, SFTP key file). Its "Test
-connection" button tries the settings before you save them. The top level
-of SFTP: only lists the sites: it does not connect and cannot be changed.
-A site connects when its folder is first opened.
-
-Features:
+## Features
 
 - FTP (passive mode, works behind NAT) and SFTP (SSH 2, through libssh2
   and AmiSSL).
@@ -42,63 +39,95 @@ Features:
 - Files of any size, reading from any position.
 - Names with national characters (UTF-8 on the server), upper and lower
   case ignored as on any Amiga volume.
-- Dates (SetDate, Copy CLONE) where the server allows it.
+- Dates (`SetDate`, `Copy CLONE`) where the server allows it.
 - Connections are made when needed, closed when idle and made again after
   network problems.
 
-Requirements (not included, get them from OS4Depot):
+## Requirements
 
-- clib4.library 2.5 or newer:
-  OS4Depot development/library/misc/clib4.lha
+Not included, get them from OS4Depot:
+
+- clib4.library 2.5 or newer: `development/library/misc/clib4.lha`
 - AmiSSL 5 (5.1 or newer) or AmiSSL 6 (for SFTP):
-  OS4Depot library/misc/amissl.lha
+  `library/misc/amissl.lha`
 - filesysbox.library 54.8 or newer (AmigaOS 4.1 Final Edition updates)
 
 Supported AmiSSL versions: every AmiSSL 5 from 5.1 on, and AmiSSL 6
 (6.1 or newer). When both are installed, AmiSSL 6 is used. AmiSSL 4 and
 older are not supported. FTP sites do not need AmiSSL.
 
-Installation: double-click Install, then start SYS:Prefs/sftphprefs and
-add your sites. SFTPHandler.guide has all the details.
+## Installation
 
-History:
+Double-click `Install`, then start `SYS:Prefs/sftphprefs` and add your
+sites. `SFTPHandler.guide` has all the details.
 
-- 0.15 (2026-11-18): faster SFTP downloads: each read request asks for
-  255 KB instead of 30000 bytes, and with AES ciphers (servers without
-  chacha20-poly1305) a packet is decrypted in one go instead of 16 bytes
-  at a time (about 2.7 times as fast). Servers that give less than asked
-  for in one read reply work now. New DOSDriver option CIPHERS.
-- 0.14 (2026-11-18): FTP: big folders on ZitaFTP Server no longer end in
-  "No disk present", and open much faster. Workbench reads only the start
-  of each file; ZitaFTP often sent no reply for such a cut download (the
-  handler waited 5 seconds and logged in again) and sometimes one reply
-  too many (the replies got out of step). Cut downloads now end with
-  ABOR, and late replies are dropped.
-- 0.13 (2026-11-18): clearer messages instead of "Error -1": a server
-  that refuses to save a file gives "file is write protected" (also when
-  the file is opened or saved), "file too large" gives "disk is full".
-- 0.12 (2026-11-18): FTP: when the server has no data connection free
-  ("425 cannot open data connection", for example ZitaFTP Server after
-  many quick transfers), the handler waits and asks again instead of
-  failing with "No disk present". Workbench reads the start of every file
-  of a folder it opens, so a big folder needs many data connections.
-- 0.11 (2026-11-17): SFTP two-factor logins (first in the 0.10 beta): the
-  server's questions (such as "Verification code:") are asked with a
-  requester, logins in two steps (key and code, key and password) work,
-  a connection that needed a code stays open while unused (DOSDriver
-  option CODEIDLETIME). Works with AmiSSL 6 and with every AmiSSL 5 (5.1
-  or newer): 0.9 needed AmiSSL 5.27 and said "needs AmiSSL 5 or newer"
-  with an older one such as 5.25 or with only AmiSSL 6. New icons in the
-  AmigaOS 4.1 style, and a volume icon for SFTP: (Install copies it to
-  ENVARC:Sys/def_SFTP.info).
-- 0.10 beta (2026-11-17): BETA from the 2fa branch, not for OS4Depot.
-  SFTP two-factor logins: the server's questions (such as "Verification
-  code:") are asked with a requester, logins in two steps (key and code,
-  key and password) work. A connection that needed a code stays open
-  while unused (new DOSDriver option CODEIDLETIME). sftphprefs: Test
-  connection asks the same questions.
-- 0.9 (2026-11-15): first release. Install can update an installation
-  that is in use (it stops SFTP: and mounts it again).
+## Using it
+
+The sites are kept with the prefs program sftphprefs (name, protocol,
+server, port, user, password, start folder, SFTP key file). Its "Test
+connection" button tries the settings before you save them. The top level
+of `SFTP:` only lists the sites: it does not connect and cannot be
+changed. A site connects when its folder is first opened.
+
+## License
 
 sftp-handler is public domain. It contains libssh2 (BSD licence) and
-Expat (MIT licence); see Third-party.txt.
+Expat (MIT licence); see `Third-party.txt`.
+
+## History
+
+### 0.15 (18.11.2026)
+
+- Faster SFTP downloads: each read request asks for 255 KB instead of 30000
+  bytes, and with AES ciphers (servers without chacha20-poly1305) a packet
+  is decrypted in one go instead of 16 bytes at a time (about 2.7 times as
+  fast). Servers that give less than asked for in one read reply work now.
+  New DOSDriver option CIPHERS.
+
+### 0.14 (18.11.2026)
+
+- FTP: big folders on ZitaFTP Server no longer end in "No disk present",
+  and open much faster. Workbench reads only the start of each file;
+  ZitaFTP often sent no reply for such a cut download (the handler waited 5
+  seconds and logged in again) and sometimes one reply too many (the
+  replies got out of step). Cut downloads now end with ABOR, and late
+  replies are dropped.
+
+### 0.13 (18.11.2026)
+
+- Clearer messages instead of "Error -1": a server that refuses to save a
+  file gives "file is write protected" (also when the file is opened or
+  saved), "file too large" gives "disk is full".
+
+### 0.12 (18.11.2026)
+
+- FTP: when the server has no data connection free ("425 cannot open data
+  connection", for example ZitaFTP Server after many quick transfers), the
+  handler waits and asks again instead of failing with "No disk present".
+  Workbench reads the start of every file of a folder it opens, so a big
+  folder needs many data connections.
+
+### 0.11 (17.11.2026)
+
+- SFTP two-factor logins (first in the 0.10 beta): the server's questions
+  (such as "Verification code:") are asked with a requester, logins in two
+  steps (key and code, key and password) work, a connection that needed a
+  code stays open while unused (DOSDriver option CODEIDLETIME). Works with
+  AmiSSL 6 and with every AmiSSL 5 (5.1 or newer): 0.9 needed AmiSSL 5.27
+  and said "needs AmiSSL 5 or newer" with an older one such as 5.25 or with
+  only AmiSSL 6. New icons in the AmigaOS 4.1 style, and a volume icon for
+  SFTP: (Install copies it to ENVARC:Sys/def_SFTP.info).
+
+### 0.10 beta (17.11.2026)
+
+- BETA from the 2fa branch, not for OS4Depot. SFTP two-factor logins: the
+  server's questions (such as "Verification code:") are asked with a
+  requester, logins in two steps (key and code, key and password) work. A
+  connection that needed a code stays open while unused (new DOSDriver
+  option CODEIDLETIME). sftphprefs: Test connection asks the same
+  questions.
+
+### 0.9 (15.11.2026)
+
+- First release. Install can update an installation that is in use (it
+  stops SFTP: and mounts it again).

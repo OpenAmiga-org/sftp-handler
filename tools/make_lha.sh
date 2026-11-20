@@ -36,7 +36,7 @@ VH="$ROOT/src/os4/version.h"
 
 ver=$(sed -n 's/^#define SFH_VERSION  *\([0-9]*\)/\1/p' "$VH").$(sed -n 's/^#define SFH_REVISION \([0-9]*\)/\1/p' "$VH")
 amigadate=$(sed -n 's/^#define SFH_DATE *"\(.*\)"/\1/p' "$VH")
-isodate=$(date +%Y%m%d)
+isodate=$(date +%d.%m.%Y)   # the readme date, DD.MM.YYYY
 
 for f in sftp-handler sftphprefs; do
 	verstr=$(strings "$ROOT/build/os4/$f" | grep -m1 -F "\$VER: $f $ver (" || true)
@@ -61,8 +61,8 @@ python3 -I "$ROOT/tools/update_readme.py"
 
 # every release says what changed: the readme and the guide need an entry
 # for this version
-if ! grep -q "^- $ver[ (]" "$ROOT/package/SFTPHandler.readme"; then
-	echo "package/SFTPHandler.readme has no History entry \"- $ver (...)\"" >&2
+if ! grep -q "^### $ver[ (]" "$ROOT/package/SFTPHandler.readme"; then
+	echo "package/SFTPHandler.readme has no History entry \"### $ver (...)\"" >&2
 	exit 1
 fi
 if ! grep -q "^@{b}$ver[ (]" "$ROOT/package/SFTPHandler/SFTPHandler.guide"; then

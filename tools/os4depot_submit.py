@@ -9,7 +9,7 @@ sends to that form (its action and its f_replaces value).
 
   tools/os4depot_submit.py           show what would be sent (nothing is sent)
   tools/os4depot_submit.py --send    send it (multipart POST, like the web form);
-                                     OS4DEPOT_EMAIL must be set (it is sent hidden)
+                                     the email comes from the readme (sent hidden)
 
 Run tools/make_lha.sh first: it writes dist/SFTPHandler.lha and build/stage/SFTPHandler.readme.
 
@@ -41,7 +41,9 @@ def refuse_beta():
     for f in (README, staged):
         with open(f, "rb") as fh:
             data = fh.read()
-        if b") beta" in data or b"BETA" in data:
+        # what make_lha.sh / build_os4.sh put into beta builds (the History
+        # may mention earlier betas)
+        if b") beta" in data or b"THIS IS A BETA" in data or re.search(rb"^description: .* - BETA$", data, re.M):
             sys.exit(f"Refused: {f} is from a beta build; run tools/make_lha.sh on main.")
 
 
@@ -78,9 +80,9 @@ fields = [
     ("f_version", meta["version"]),
     ("f_author", meta["author"]),
     ("f_submitter", meta["submitter"]),
-    ("f_email", os.environ.get("OS4DEPOT_EMAIL", "")),
+    ("f_email", meta.get("email") or os.environ.get("OS4DEPOT_EMAIL", "")),
     ("f_hideemail", "on"),
-    ("f_url", ""),
+    ("f_url", meta.get("url", "")),
     ("f_donateurl", ""),
     ("f_category", meta["category"]),
     ("f_replaces", replaces.group(1)),
@@ -106,8 +108,8 @@ assert len(meta["description"]) <= 50 and len(meta["name"]) <= 20 and len(meta["
 if "--send" not in sys.argv:
     print("\n(dry run: nothing sent)")
     sys.exit(0)
-if not os.environ.get("OS4DEPOT_EMAIL"):
-    sys.exit("not sent: OS4DEPOT_EMAIL missing")
+if not dict(fields)["f_email"]:
+    sys.exit("not sent: no email (readme email: field or OS4DEPOT_EMAIL)")
 
 cmd = ["curl", "-sS", "-o", "/dev/stdout", "-w", "\nHTTP %{http_code}\n", "--max-time", "600",
        "-A", "Mozilla/5.0 (compatible; os4depot-submit)"]
