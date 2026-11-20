@@ -1,7 +1,7 @@
 # sftp-handler
 
 An AmigaOS 4 filesystem handler for FTP and SFTP servers, and its prefs
-program `sftphprefs`.
+program `sftphprefs`. sftp-handler is an [OpenAmiga.org project](http://openamiga.org/?function=gitproject&name=sftp-handler).
 
 The handler shows one volume (for example `SFTP:`). Its root lists the
 sites configured with sftphprefs, as folders, without connecting. Opening
@@ -9,10 +9,12 @@ a site's folder connects to its server and shows the files there. The
 root itself is read-only: sites are added, changed and removed only with
 sftphprefs.
 
-Built on filesysbox.library, clib4, libssh2 and AmiSSL.
+Built on filesysbox.library, clib4, libssh2 and AmiSSL (AmiSSL 5.1 or
+newer, or AmiSSL 6).
 
 Download: [SFTPHandler on OS4Depot](https://os4depot.net/?function=showfile&file=driver/handler/sftphandler.lha)
-(test versions: [GitHub releases](https://github.com/orgin/sftp-handler/releases)).
+(handler, prefs program, Install script, AmigaGuide; test versions are
+[GitHub pre-releases](https://github.com/OpenAmiga-org/sftp-handler/releases)).
 
 ## Layout
 
@@ -149,6 +151,13 @@ The OS4 build needs the cross-compiler image
 - **0.10 beta** (2026-11-17): BETA from the 2fa branch, not for OS4Depot. SFTP two-factor logins: the server's questions (such as "Verification code:") are asked with a requester, logins in two steps (key and code, key and password) work. A connection that needed a code stays open while unused (new DOSDriver option CODEIDLETIME). sftphprefs: Test connection asks the same questions.
 - **0.9** (2026-11-15): first release. Install can update an installation that is in use (it stops SFTP: and mounts it again).
 <!-- changelog end -->
+
+## History
+
+sftp-handler was written in November 2026 and released as 0.9 on
+OS4Depot. It started on GitHub as orgin/sftp-handler and moved to the
+OpenAmiga.org organization in November 2026 with its full commit
+history.
 
 Public domain, see `UNLICENSE`. libssh2 is BSD licensed (its licence goes
 into the release archive).

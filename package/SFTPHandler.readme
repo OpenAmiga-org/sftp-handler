@@ -5,7 +5,7 @@ date: @DATE@
 author: Björn Hagström
 submitter: Björn Hagström
 email:
-url:
+url: http://openamiga.org/?function=gitproject&name=sftp-handler
 category: driver/handler
 replaces:
 requirements: clib4.library 2.5, filesysbox.library 54.8, AmiSSL 5.1+ or 6 (SFTP)
@@ -20,6 +20,9 @@ shows each FTP and SFTP site you have set up as a folder, for example
 SFTP:My server. Inside it are the files on the server: Workbench, the
 Shell and every program can open, copy, rename, delete and save them as
 on any other disk.
+
+sftp-handler is an OpenAmiga.org project. The source code, test versions
+and bug reports are at https://github.com/OpenAmiga-org/sftp-handler
 
 The sites are kept with the prefs program sftphprefs (name, protocol,
 server, port, user, password, start folder, SFTP key file). Its "Test
