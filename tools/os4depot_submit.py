@@ -9,7 +9,7 @@ sends to that form (its action and its f_replaces value).
 
   tools/os4depot_submit.py           show what would be sent (nothing is sent)
   tools/os4depot_submit.py --send    send it (multipart POST, like the web form);
-                                     the email comes from the readme (sent hidden)
+                                     the email comes from ~/openamiga-rules/os4depot.conf (sent hidden)
 
 Run tools/make_lha.sh first: it writes dist/SFTPHandler.lha and build/stage/SFTPHandler.readme.
 
@@ -29,6 +29,20 @@ README = os.path.join(ROOT, "build", "stage", "SFTPHandler.readme")
 SITE = "https://os4depot.net/"
 PUBLISHED = "driver/handler/sftphandler.lha"
 AGENT = "Mozilla/5.0 (compatible; os4depot-submit)"
+
+
+def upload_email():
+    """The uploader's address goes only into the form (sent hidden), never
+    into the readme or the archive: OS4DEPOT_EMAIL, else email= in
+    ~/openamiga-rules/os4depot.conf (not in any repository)."""
+    if os.environ.get("OS4DEPOT_EMAIL"):
+        return os.environ["OS4DEPOT_EMAIL"]
+    conf = os.path.expanduser("~/openamiga-rules/os4depot.conf")
+    if os.path.exists(conf):
+        for line in open(conf):
+            if line.startswith("email="):
+                return line.split("=", 1)[1].strip()
+    return ""
 
 
 def refuse_beta():
@@ -80,7 +94,7 @@ fields = [
     ("f_version", meta["version"]),
     ("f_author", meta["author"]),
     ("f_submitter", meta["submitter"]),
-    ("f_email", meta.get("email") or os.environ.get("OS4DEPOT_EMAIL", "")),
+    ("f_email", upload_email()),
     ("f_hideemail", "on"),
     ("f_url", meta.get("url", "")),
     ("f_donateurl", ""),
@@ -109,7 +123,7 @@ if "--send" not in sys.argv:
     print("\n(dry run: nothing sent)")
     sys.exit(0)
 if not dict(fields)["f_email"]:
-    sys.exit("not sent: no email (readme email: field or OS4DEPOT_EMAIL)")
+    sys.exit("not sent: no email (OS4DEPOT_EMAIL or ~/openamiga-rules/os4depot.conf)")
 
 cmd = ["curl", "-sS", "-o", "/dev/stdout", "-w", "\nHTTP %{http_code}\n", "--max-time", "600",
        "-A", "Mozilla/5.0 (compatible; os4depot-submit)"]

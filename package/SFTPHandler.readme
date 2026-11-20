@@ -4,7 +4,7 @@ version: @VERSION@
 date: @DATE@
 author: Björn Hagström
 submitter: Björn Hagström
-email: orgin.org@gmail.com
+email:
 url: http://openamiga.org/?function=gitproject&name=sftp-handler
 category: driver/handler
 replaces:
