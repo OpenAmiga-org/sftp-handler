@@ -5,7 +5,9 @@ Docker servers, and checks the copied files by SHA-256.
     tests/os4/run_guest.py [--no-mount]
 
 SFH_HANDLER: another handler build to test; SFH_STARTUP: more DOSDriver
-options (for example "CIPHERS=aes128-ctr DEBUG").
+options (for example "CIPHERS=aes128-ctr DEBUG"); SFH_LIBS: more host files
+for RAM:sftph/libs, first in LIBS: (for example AmiSSL 6's
+amisslmaster.library; AmiSSL never leaves memory, so reboot first).
 
 Uploads build/os4/sftp-handler, a site list for 10.0.2.2 and a DOSDriver
 to RAM:sftph, mounts SFTP: (CONFIGDIR=RAM:sftph/cfg), runs
@@ -72,9 +74,13 @@ async def setup(fleet, m, mount=True):
     # the guest's own clib4.library is older than the one the build needs
     # (it stays first in LIBS: during the test, else it may be flushed)
     await upload(fleet, CLIB4, "RAM:sftph/libs/clib4.library")
+    for lib in os.environ.get("SFH_LIBS", "").split():
+        await upload(fleet, lib, "RAM:sftph/libs/" + os.path.basename(lib))
     for c in ("Avail FLUSH", "Assign LIBS: RAM:sftph/libs System:Libs System:MUI/Libs",
-              "Version clib4.library"):
+              "Version amisslmaster.library", "Version clib4.library"):
         rc, out = await cmd(m, c)
+        if c.startswith("Version amissl"):
+            print("amisslmaster:", out.strip())
     print("clib4:", out.strip())
     if mount:
         # the old handler ends; DOS loads the new one on the next access
