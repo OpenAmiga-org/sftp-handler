@@ -12,7 +12,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-IMAGE="${OS4_IMAGE:-walkero/amigagccondocker:os4-gcc15-3.6.1}"
+IMAGE="${OS4_IMAGE:-walkero/amigagccondocker:os4-gcc15-3.7.0}"
 VH="$ROOT/src/os4/version.h"
 if [ $# -eq 0 ]; then
 	set -- handler prefs

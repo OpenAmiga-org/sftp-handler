@@ -13,7 +13,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-IMAGE="${OS4_IMAGE:-walkero/amigagccondocker:os4-gcc15-3.6.1}"
+IMAGE="${OS4_IMAGE:-walkero/amigagccondocker:os4-gcc15-3.7.0}"
 DEPS="$ROOT/build/deps"
 SSH2_VER=1.11.1
 # SSH2_POLL=yes builds libssh2 with poll() (clib4 maps it to select());

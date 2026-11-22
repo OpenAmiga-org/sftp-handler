@@ -24,7 +24,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEPS = os.path.join(ROOT, "build", "deps")
-IMAGE = os.environ.get("OS4_IMAGE", "walkero/amigagccondocker:os4-gcc15-3.6.1")
+IMAGE = os.environ.get("OS4_IMAGE", "walkero/amigagccondocker:os4-gcc15-3.7.0")
 LHA = os.environ.get("LHA", os.path.expanduser("~/linux_archivers/lha/lha"))
 BASE_VER = "5.1"
 BASE = os.path.join(DEPS, "amissl-%s-sdk" % BASE_VER)

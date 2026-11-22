@@ -62,7 +62,7 @@ puts " beta" after the version string, `make_lha.sh` writes
 Betas never go to OS4Depot.
 
 The OS4 build needs the cross-compiler image
-`walkero/amigagccondocker:os4-gcc15-3.6.1` (GCC 15, SDK 54.25, clib4).
+`walkero/amigagccondocker:os4-gcc15-3.7.0` (GCC 15, SDK 54.25, clib4).
 
 ## Design notes
 
